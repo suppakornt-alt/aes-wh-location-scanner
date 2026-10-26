@@ -87,13 +87,22 @@
   </div>
 
   <script>
-    const codeReader = new ZXing.BrowserMultiFormatReader();
     const resultText = document.getElementById('result-text');
     const resultFormat = document.getElementById('result-format');
     const toggleBtn = document.getElementById('toggle-btn');
+    
+    let codeReader;
     let isScanning = false;
+    let selectedDeviceId;
+
+    // Wait until ZXing library is loaded on window
+    window.addEventListener('load', () => {
+      codeReader = new ZXing.BrowserMultiFormatReader();
+    });
 
     toggleBtn.addEventListener('click', async () => {
+      if (!codeReader) return;
+
       if (isScanning) {
         codeReader.reset();
         isScanning = false;
@@ -105,13 +114,21 @@
         isScanning = true;
         toggleBtn.textContent = 'Stop Camera';
 
-        // ZXing's built-in decodeFromConstraints manages the video track cleanly
-        await codeReader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: 'environment' }
-            }
-          },
+        // Get available video input devices
+        const videoInputDevices = await codeReader.listVideoInputDevices();
+        
+        // Select back camera if available
+        const backCamera = videoInputDevices.find(device => 
+          device.label.toLowerCase().includes('back') || 
+          device.label.toLowerCase().includes('environment') ||
+          device.label.toLowerCase().includes('rear')
+        );
+
+        selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[0]?.deviceId;
+
+        // Start continuous decoding from video device
+        await codeReader.decodeFromVideoDevice(
+          selectedDeviceId,
           'video',
           (result, err) => {
             if (result) {

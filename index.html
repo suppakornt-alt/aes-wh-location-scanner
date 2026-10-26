@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Barcode & QR Scanner</title>
-  <!-- Locked stable CDN version -->
   <script src="https://unpkg.com/@zxing/library@0.21.0/umd/index.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -117,6 +116,7 @@
   </div>
 
   <script>
+    const videoElem = document.getElementById('video');
     const resultText = document.getElementById('result-text');
     const resultFormat = document.getElementById('result-format');
     const toggleBtn = document.getElementById('toggle-btn');
@@ -124,7 +124,8 @@
     const productName = document.getElementById('product-name');
     const locationsList = document.getElementById('locations-list');
 
-    let codeReader;
+    let codeReader = null;
+    let mediaStream = null;
     let isScanning = false;
     let lastScannedCode = null;
 
@@ -147,12 +148,8 @@
     });
 
     toggleBtn.addEventListener('click', async () => {
-      if (!codeReader) return;
-
       if (isScanning) {
-        codeReader.reset();
-        isScanning = false;
-        toggleBtn.textContent = 'Start Camera';
+        stopCamera();
         return;
       }
 
@@ -161,32 +158,46 @@
         toggleBtn.textContent = 'Stop Camera';
         lastScannedCode = null;
 
-        // Use standard decodeFromConstraints for cross-platform compatibility
-        await codeReader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: 'environment' }
-            }
-          },
-          'video',
-          (result, err) => {
-            if (result) {
-              const code = result.getText();
-              resultText.textContent = code;
-              resultFormat.textContent = result.getBarcodeFormat();
+        // Step 1: Request standard web camera access directly
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
 
-              if (navigator.vibrate) navigator.vibrate(100);
+        // Step 2: Attach raw stream to video tag
+        videoElem.srcObject = mediaStream;
+        await videoElem.play();
 
-              handleInventoryLookup(code);
-            }
+        // Step 3: Pass the active element straight into ZXing decoder
+        codeReader.decodeFromVideoElement(videoElem, (result, err) => {
+          if (result) {
+            const code = result.getText();
+            resultText.textContent = code;
+            resultFormat.textContent = result.getBarcodeFormat();
+
+            if (navigator.vibrate) navigator.vibrate(100);
+
+            handleInventoryLookup(code);
           }
-        );
+        });
+
       } catch (err) {
-        alert('Could not start camera: ' + err.message);
-        isScanning = false;
-        toggleBtn.textContent = 'Start Camera';
+        alert('Camera Error: ' + err.name + ' - ' + err.message);
+        stopCamera();
       }
     });
+
+    function stopCamera() {
+      isScanning = false;
+      if (codeReader) {
+        codeReader.reset();
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+      videoElem.srcObject = null;
+      toggleBtn.textContent = 'Start Camera';
+    }
 
     function handleInventoryLookup(code) {
       if (code === lastScannedCode) return;

@@ -22,11 +22,12 @@
       border-radius: 12px;
       overflow: hidden;
       background: #000;
+      min-height: 320px;
     }
     video {
       width: 100%;
       height: 320px;
-      object-fit: cover;
+      object-fit: contain;
       display: block;
     }
     .overlay {
@@ -34,11 +35,12 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 70%;
-      height: 45%;
-      border: 2px dashed rgba(255, 255, 255, 0.8);
+      width: 75%;
+      height: 50%;
+      border: 2px dashed rgba(255, 255, 255, 0.85);
       border-radius: 8px;
       pointer-events: none;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
     }
     .card {
       max-width: 480px;
@@ -87,75 +89,25 @@
   </div>
 
   <script>
-    let codeReader;
-    let isScanning = false;
-    
-    window.addEventListener('load', () => {
-      // 1. Explicitly enable all target formats including 1D barcodes & QR
-      const hints = new Map();
-      const formats = [
-        ZXing.BarcodeFormat.QR_CODE,
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.UPC_A,
-        ZXing.BarcodeFormat.UPC_E,
-        ZXing.BarcodeFormat.ITF
-      ];
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true); // Extra image processing passes
-    
-      codeReader = new ZXing.BrowserMultiFormatReader(hints);
-    });
-    
+    const video = document.getElementById('video');
     const resultText = document.getElementById('result-text');
     const resultFormat = document.getElementById('result-format');
     const toggleBtn = document.getElementById('toggle-btn');
-    
-    toggleBtn.addEventListener('click', async () => {
-      if (!codeReader) return;
-    
-      if (isScanning) {
-        codeReader.reset();
-        isScanning = false;
-        toggleBtn.textContent = 'Start Camera';
-        return;
-      }
-    
-      try {
-        isScanning = true;
-        toggleBtn.textContent = 'Stop Camera';
-    
-        // 2. Request high resolution and environment (back) camera
-        const constraints = {
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            focusMode: { ideal: 'continuous' }
-          }
-        };
-    
-        // 3. Start decoding directly from stream constraints
-        await codeReader.decodeFromConstraints(
-          constraints,
-          'video',
-          (result, err) => {
-            if (result) {
-              resultText.textContent = result.getText();
-              resultFormat.textContent = result.getBarcodeFormat();
-    
-              if (navigator.vibrate) navigator.vibrate(100);
-            }
-          }
-        );
-      } catch (err) {
-        alert('Camera error: ' + err.message);
-        isScanning = false;
-        toggleBtn.textContent = 'Start Camera';
-      }
-    });
-  </script>
-</body>
-</html>
+
+    let isScanning = false;
+    let stream = null;
+    let zxingReader = null;
+    let nativeDetector = null;
+    let animationFrameId = null;
+
+    // Check Native BarcodeDetector API support
+    const hasNativeSupport = 'BarcodeDetector' in window;
+
+    async function initScanner() {
+      if (hasNativeSupport) {
+        const supportedFormats = await BarcodeDetector.getSupportedFormats();
+        nativeDetector = new BarcodeDetector({ formats: supportedFormats });
+      } else if (window.ZXing) {
+        // Fallback to ZXing with TRY_HARDER hint and high resolution
+        const hints = new Map();
+        const formats =

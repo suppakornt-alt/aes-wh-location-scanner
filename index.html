@@ -2,67 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>High-Speed Inventory Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fast Web Inventory Scanner</title>
   <script src="https://unpkg.com/@zxing/library@latest"></script>
   <style>
     * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-    body { margin: 0; padding: 1rem; background: #0f172a; color: #f8fafc; }
-    
-    .header { text-align: center; margin-bottom: 1rem; }
-    
-    /* Scanner viewport optimization */
+    body { margin: 0; padding: 1rem; background: #0f172a; color: #f8fafc; text-align: center; }
+
     .scanner-card {
       position: relative;
-      max-width: 500px;
+      max-width: 480px;
       margin: 0 auto;
-      border-radius: 16px;
+      border-radius: 12px;
       overflow: hidden;
       background: #000;
-      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+      min-height: 260px;
     }
     
     video {
       width: 100%;
-      height: 300px;
-      object-fit: cover;
+      height: 280px;
+      object-fit: contain;
       display: block;
     }
-    
-    /* High-contrast targeting overlay */
+
     .viewfinder {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       width: 80%;
-      height: 40%;
-      border: 2px solid #38bdf8;
-      border-radius: 12px;
-      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.45);
+      height: 45%;
+      border: 2px dashed #38bdf8;
+      border-radius: 8px;
       pointer-events: none;
-    }
-    
-    .viewfinder::after {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: #ef4444;
-      box-shadow: 0 0 8px #ef4444;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
     }
 
-    .controls {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      margin: 1rem 0;
-    }
+    .controls { margin: 1rem 0; }
     
     button {
-      padding: 12px 20px;
+      padding: 12px 24px;
+      font-size: 1rem;
       font-weight: 600;
       border-radius: 8px;
       border: none;
@@ -71,19 +52,19 @@
       color: #fff;
     }
     button:active { background: #0369a1; }
-    button.secondary { background: #334155; }
 
-    /* Inventory dashboard */
     .panel {
-      max-width: 500px;
+      max-width: 480px;
       margin: 1rem auto;
-      padding: 1.25rem;
+      padding: 1rem;
       background: #1e293b;
-      border-radius: 12px;
+      border-radius: 10px;
+      text-align: left;
       border: 1px solid #334155;
     }
     
-    .sku-title { font-size: 1.4rem; font-weight: 700; color: #38bdf8; }
+    .sku-title { font-size: 1.3rem; font-weight: 700; color: #38bdf8; word-break: break-all; }
+    
     .location-row {
       display: flex;
       justify-content: space-between;
@@ -91,9 +72,9 @@
       padding: 10px 0;
       border-bottom: 1px solid #334155;
     }
-    
+
     .btn-group { display: flex; gap: 6px; }
-    .btn-sm { padding: 6px 12px; font-size: 0.85rem; border-radius: 6px; }
+    .btn-sm { padding: 6px 12px; font-size: 0.85rem; border-radius: 6px; color: white; border: none; cursor: pointer; }
     .btn-add { background: #16a34a; }
     .btn-pull { background: #dc2626; }
     .btn-move { background: #d97706; }
@@ -101,9 +82,7 @@
 </head>
 <body>
 
-  <div class="header">
-    <h2>Inventory Manager</h2>
-  </div>
+  <h2>Inventory Scanner</h2>
 
   <div class="scanner-card">
     <video id="video" autoplay playsinline muted></video>
@@ -112,37 +91,34 @@
 
   <div class="controls">
     <button id="toggle-btn">Start Camera</button>
-    <button id="torch-btn" class="secondary" style="display:none;">Torch</button>
   </div>
 
-  <!-- Inventory UI Dashboard -->
+  <!-- Inventory Result UI -->
   <div class="panel" id="inventory-panel" style="display:none;">
     <div style="font-size: 0.8rem; color: #94a3b8;">SCANNED SKU</div>
     <div class="sku-title" id="sku-val">-</div>
-    <div id="product-name" style="margin-bottom: 1rem; color: #cbd5e1;">-</div>
+    <div id="product-name" style="margin-bottom: 1rem; color: #cbd5e1; margin-top: 4px;">-</div>
 
-    <div style="font-weight: 600; margin-bottom: 0.5rem; color: #94a3b8;">LOCATIONS & STOCK</div>
+    <div style="font-weight: 600; margin-bottom: 0.5rem; color: #94a3b8; font-size: 0.85rem;">LOCATIONS & STOCK</div>
     <div id="locations-list"></div>
   </div>
 
   <script>
     const video = document.getElementById('video');
     const toggleBtn = document.getElementById('toggle-btn');
-    const torchBtn = document.getElementById('torch-btn');
     const inventoryPanel = document.getElementById('inventory-panel');
     const skuVal = document.getElementById('sku-val');
     const productName = document.getElementById('product-name');
     const locationsList = document.getElementById('locations-list');
 
     let isScanning = false;
-    let mediaStream = null;
-    let videoTrack = null;
-    let zxingReader = null;
+    let codeReader = null;
     let nativeDetector = null;
-    let animId = null;
-    let lastScannedCode = null;
+    let nativeStream = null;
+    let animFrameId = null;
+    let lastCode = null;
 
-    // Dummy Database Lookup
+    // Database Lookup Table
     const mockDB = {
       "8850123456789": {
         name: "Industrial Bearing Pack 10mm",
@@ -157,96 +133,82 @@
       }
     };
 
-    async function initHardware() {
+    async function initScanner() {
+      // 1. Try Native Hardware API (Android Chrome / iOS 17 Safari)
       if ('BarcodeDetector' in window) {
-        const formats = await BarcodeDetector.getSupportedFormats();
-        nativeDetector = new BarcodeDetector({ formats });
-      } else if (window.ZXing) {
+        try {
+          const formats = await BarcodeDetector.getSupportedFormats();
+          nativeDetector = new BarcodeDetector({ formats });
+          return;
+        } catch (e) {}
+      }
+
+      // 2. Fallback to ZXing engine
+      if (window.ZXing) {
         const hints = new Map();
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-          ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.EAN_13,
-          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A
+          ZXing.BarcodeFormat.QR_CODE,
+          ZXing.BarcodeFormat.EAN_13,
+          ZXing.BarcodeFormat.CODE_128,
+          ZXing.BarcodeFormat.UPC_A
         ]);
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+        codeReader = new ZXing.BrowserMultiFormatReader(hints);
       }
     }
 
-    async function startScan() {
-      // Direct camera constraint optimization for speed & sub-second focus
+    async function startCamera() {
       const constraints = {
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
+        video: { facingMode: { ideal: 'environment' } }
       };
 
-      mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      video.srcObject = mediaStream;
-      videoTrack = mediaStream.getVideoTracks()[0];
-
-      // Enable Hardware Zoom & Focus Constraints if Supported by Browser Driver
-      if (videoTrack.getCapabilities) {
-        const capabilities = videoTrack.getCapabilities();
-        const advancedOpts = {};
-
-        if (capabilities.focusMode?.includes('continuous')) {
-          advancedOpts.focusMode = 'continuous';
-        }
-        // Force 1.5x zoom to resolve macro-distance blur issues instantly
-        if (capabilities.zoom) {
-          advancedOpts.zoom = Math.min(1.5, capabilities.zoom.max);
-        }
-
-        if (Object.keys(advancedOpts).length > 0) {
-          await videoTrack.applyConstraints({ advanced: [advancedOpts] }).catch(() => {});
-        }
-
-        if (capabilities.torch) {
-          torchBtn.style.display = 'inline-block';
-        }
-      }
-
-      await video.play();
-
       if (nativeDetector) {
-        scanLoopNative();
-      } else if (zxingReader) {
-        zxingReader.decodeFromVideoElement(video, (result) => {
-          if (result) handleScanSuccess(result.getText());
-        });
+        // Run via Native Hardware Stream Loop
+        nativeStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = nativeStream;
+        await video.play();
+        scanNativeLoop();
+      } else if (codeReader) {
+        // Run via ZXing Stream Engine
+        await codeReader.decodeFromConstraints(
+          constraints,
+          'video',
+          (result, err) => {
+            if (result) handleSuccess(result.getText());
+          }
+        );
+      } else {
+        alert('Scanner engine failed to initialize.');
       }
     }
 
-    async function scanLoopNative() {
+    async function scanNativeLoop() {
       if (!isScanning) return;
       try {
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
           const codes = await nativeDetector.detect(video);
           if (codes.length > 0) {
-            handleScanSuccess(codes[0].rawValue);
+            handleSuccess(codes[0].rawValue);
           }
         }
       } catch (e) {}
-      animId = requestAnimationFrame(scanLoopNative);
+      animFrameId = requestAnimationFrame(scanNativeLoop);
     }
 
-    function handleScanSuccess(code) {
-      if (code === lastScannedCode) return; // Prevent duplicate rapid scanning
-      lastScannedCode = code;
+    function handleSuccess(code) {
+      if (code === lastCode) return;
+      lastCode = code;
 
       if (navigator.vibrate) navigator.vibrate(80);
 
-      // Lookup Data instantly
       skuVal.textContent = code;
-      const match = mockDB[code] || {
-        name: "Unknown SKU (Not in Database)",
+      const data = mockDB[code] || {
+        name: "Unknown SKU (New Item)",
         locations: [{ code: "RECEIVING", qty: 0 }]
       };
 
-      productName.textContent = match.name;
-      renderLocations(match.locations);
+      productName.textContent = data.name;
+      renderLocations(data.locations);
       inventoryPanel.style.display = 'block';
     }
 
@@ -255,48 +217,47 @@
         <div class="location-row">
           <div>
             <strong style="color:#f8fafc;">${loc.code}</strong>
-            <span style="color:#94a3b8; font-size:0.9rem; margin-left:8px;">Qty: ${loc.qty}</span>
+            <span style="color:#94a3b8; font-size:0.85rem; margin-left:8px;">Qty: ${loc.qty}</span>
           </div>
           <div class="btn-group">
-            <button class="btn-sm btn-add" onclick="alert('Added to ${loc.code}')">+</button>
-            <button class="btn-sm btn-pull" onclick="alert('Pulled from ${loc.code}')">-</button>
-            <button class="btn-sm btn-move" onclick="alert('Move ${loc.code}')">Move</button>
+            <button class="btn-sm btn-add" onclick="alert('Added stock to ${loc.code}')">+</button>
+            <button class="btn-sm btn-pull" onclick="alert('Pulled stock from ${loc.code}')">-</button>
+            <button class="btn-sm btn-move" onclick="alert('Move ${loc.code} location')">Move</button>
           </div>
         </div>
       `).join('');
     }
 
-    function stopScan() {
+    function stopCamera() {
       isScanning = false;
-      if (animId) cancelAnimationFrame(animId);
-      if (zxingReader) zxingReader.reset();
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      if (codeReader) codeReader.reset();
+      
+      if (nativeStream) {
+        nativeStream.getTracks().forEach(track => track.stop());
         video.srcObject = null;
+        nativeStream = null;
       }
       toggleBtn.textContent = 'Start Camera';
-      torchBtn.style.display = 'none';
     }
 
     toggleBtn.addEventListener('click', async () => {
       if (isScanning) {
-        stopScan();
+        stopCamera();
       } else {
-        isScanning = true;
-        toggleBtn.textContent = 'Stop Camera';
-        lastScannedCode = null;
-        await startScan();
+        try {
+          isScanning = true;
+          toggleBtn.textContent = 'Stop Camera';
+          lastCode = null;
+          await startCamera();
+        } catch (err) {
+          alert('Could not start camera: ' + err.message);
+          stopCamera();
+        }
       }
     });
 
-    torchBtn.addEventListener('click', async () => {
-      if (videoTrack) {
-        const current = videoTrack.getConstraints().advanced?.[0]?.torch || false;
-        await videoTrack.applyConstraints({ advanced: [{ torch: !current }] });
-      }
-    });
-
-    window.addEventListener('load', initHardware);
+    window.addEventListener('load', initScanner);
   </script>
 </body>
 </html>

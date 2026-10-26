@@ -15,7 +15,7 @@
     #result { font-size: 1.6rem; font-weight: 700; color: #0284c7; word-break: break-all; margin: .5rem 0; }
     button { padding: 10px 24px; font-size: 1rem; font-weight: 600; color: #fff; background: #0284c7; border: 0; border-radius: 8px; cursor: pointer; }
     #copy-btn { background: #64748b; padding: 6px 14px; font-size: .9rem; }
-    #status { color: #64748b; font-size: .9rem; min-height: 1.2rem; }
+    #status { color: #64748b; font-size: .9rem; min-height: 1.2rem; margin-top: .5rem; }
     #warn { color: #b91c1c; font-size: .95rem; margin: .5rem auto; max-width: 480px; }
   </style>
 </head>
@@ -61,21 +61,56 @@
       if (navigator.vibrate) navigator.vibrate(100);
     }
 
+    // Tries simple camera requests first, then falls back to each camera one by one
+    async function openCamera() {
+      const attempts = [
+        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+        { video: { facingMode: 'environment' }, audio: false },
+        { video: true, audio: false }
+      ];
+
+      let lastError = null;
+
+      for (const constraints of attempts) {
+        try {
+          return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+          lastError = err;
+          if (err.name === 'NotAllowedError') throw err; // permission denied, no point retrying
+        }
+      }
+
+      // Last resort: try every camera on the phone individually
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(d => d.kind === 'videoinput').reverse();
+        for (const cam of cameras) {
+          try {
+            return await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: cam.deviceId } },
+              audio: false
+            });
+          } catch (err) {
+            lastError = err;
+          }
+        }
+      } catch (err) {
+        lastError = err;
+      }
+
+      throw lastError;
+    }
+
     async function start() {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
         statusEl.textContent = 'Camera needs HTTPS. Open the https:// github.io link, not a file.';
         return;
       }
       try {
+        stop(); // release any camera this page may still be holding
         statusEl.textContent = 'Opening camera...';
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        });
+
+        stream = await openCamera();
         video.srcObject = stream;
         await video.play();
 
@@ -106,7 +141,7 @@
     }
 
     // Option A: the phone's built-in scanner (Chrome on Android)
-    async function startNativeLoop() {
+    function startNativeLoop() {
       const detector = new BarcodeDetector();
       const tick = async () => {
         if (!running) return;
@@ -157,8 +192,12 @@
     toggleBtn.addEventListener('click', () => (running ? stop() : start()));
 
     document.getElementById('copy-btn').addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(resultEl.textContent); statusEl.textContent = 'Copied'; }
-      catch { statusEl.textContent = 'Copy not allowed here'; }
+      try {
+        await navigator.clipboard.writeText(resultEl.textContent);
+        statusEl.textContent = 'Copied';
+      } catch {
+        statusEl.textContent = 'Copy not allowed here';
+      }
     });
   </script>
 </body>

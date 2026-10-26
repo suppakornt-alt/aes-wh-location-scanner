@@ -87,60 +87,71 @@
   </div>
 
   <script>
+    let codeReader;
+    let isScanning = false;
+    
+    window.addEventListener('load', () => {
+      // 1. Explicitly enable all target formats including 1D barcodes & QR
+      const hints = new Map();
+      const formats = [
+        ZXing.BarcodeFormat.QR_CODE,
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.UPC_A,
+        ZXing.BarcodeFormat.UPC_E,
+        ZXing.BarcodeFormat.ITF
+      ];
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true); // Extra image processing passes
+    
+      codeReader = new ZXing.BrowserMultiFormatReader(hints);
+    });
+    
     const resultText = document.getElementById('result-text');
     const resultFormat = document.getElementById('result-format');
     const toggleBtn = document.getElementById('toggle-btn');
     
-    let codeReader;
-    let isScanning = false;
-    let selectedDeviceId;
-
-    // Wait until ZXing library is loaded on window
-    window.addEventListener('load', () => {
-      codeReader = new ZXing.BrowserMultiFormatReader();
-    });
-
     toggleBtn.addEventListener('click', async () => {
       if (!codeReader) return;
-
+    
       if (isScanning) {
         codeReader.reset();
         isScanning = false;
         toggleBtn.textContent = 'Start Camera';
         return;
       }
-
+    
       try {
         isScanning = true;
         toggleBtn.textContent = 'Stop Camera';
-
-        // Get available video input devices
-        const videoInputDevices = await codeReader.listVideoInputDevices();
-        
-        // Select back camera if available
-        const backCamera = videoInputDevices.find(device => 
-          device.label.toLowerCase().includes('back') || 
-          device.label.toLowerCase().includes('environment') ||
-          device.label.toLowerCase().includes('rear')
-        );
-
-        selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[0]?.deviceId;
-
-        // Start continuous decoding from video device
-        await codeReader.decodeFromVideoDevice(
-          selectedDeviceId,
+    
+        // 2. Request high resolution and environment (back) camera
+        const constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            focusMode: { ideal: 'continuous' }
+          }
+        };
+    
+        // 3. Start decoding directly from stream constraints
+        await codeReader.decodeFromConstraints(
+          constraints,
           'video',
           (result, err) => {
             if (result) {
               resultText.textContent = result.getText();
               resultFormat.textContent = result.getBarcodeFormat();
-              
+    
               if (navigator.vibrate) navigator.vibrate(100);
             }
           }
         );
       } catch (err) {
-        alert('Could not start camera: ' + err.message);
+        alert('Camera error: ' + err.message);
         isScanning = false;
         toggleBtn.textContent = 'Start Camera';
       }

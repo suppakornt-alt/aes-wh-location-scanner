@@ -118,30 +118,17 @@
   </div>
 
   <script>
-    // Configure format hints to aggressively scan 1D + QR codes
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.QR_CODE,
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.UPC_A,
-      ZXing.BarcodeFormat.UPC_E,
-      ZXing.BarcodeFormat.ITF
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    let codeReader;
+    let currentStream = null;
+    let isScanning = false;
+    let lastScannedCode = null;
 
-    const codeReader = new ZXing.BrowserMultiFormatReader(hints);
     const resultText = document.getElementById('result-text');
     const resultFormat = document.getElementById('result-format');
     const toggleBtn = document.getElementById('toggle-btn');
     const inventoryCard = document.getElementById('inventory-card');
     const productName = document.getElementById('product-name');
     const locationsList = document.getElementById('locations-list');
-
-    let isScanning = false;
-    let lastScannedCode = null;
 
     // Database Lookup Table
     const mockDB = {
@@ -158,11 +145,29 @@
       }
     };
 
+    window.addEventListener('load', () => {
+      // Hints array to prioritize both 1D and 2D barcode formats
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.QR_CODE,
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.UPC_A,
+        ZXing.BarcodeFormat.UPC_E,
+        ZXing.BarcodeFormat.ITF
+      ]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+      codeReader = new ZXing.BrowserMultiFormatReader(hints);
+    });
+
     toggleBtn.addEventListener('click', async () => {
+      if (!codeReader) return;
+
       if (isScanning) {
-        codeReader.reset();
-        isScanning = false;
-        toggleBtn.textContent = 'Start Camera';
+        stopScanner();
         return;
       }
 
@@ -171,38 +176,49 @@
         toggleBtn.textContent = 'Stop Camera';
         lastScannedCode = null;
 
-        // Automatically enumerate and select the main rear/environment camera device
-        const videoInputDevices = await codeReader.listVideoInputDevices();
-        const backCamera = videoInputDevices.find(device => 
-          device.label.toLowerCase().includes('back') || 
-          device.label.toLowerCase().includes('environment') ||
-          device.label.toLowerCase().includes('rear')
-        );
-        
-        const selectedDeviceId = backCamera ? backCamera.deviceId : (videoInputDevices[0] ? videoInputDevices[0].deviceId : undefined);
-
-        // Decode from explicitly targeted camera device
-        await codeReader.decodeFromVideoDevice(
-          selectedDeviceId,
-          'video',
-          (result, err) => {
-            if (result) {
-              const code = result.getText();
-              resultText.textContent = code;
-              resultFormat.textContent = result.getBarcodeFormat();
-              
-              if (navigator.vibrate) navigator.vibrate(100);
-              
-              handleInventoryLookup(code);
-            }
+        // 1. Get exact video stream via standard browser getUserMedia
+        currentStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           }
-        );
+        });
+
+        const videoElem = document.getElementById('video');
+        videoElem.srcObject = currentStream;
+        await videoElem.play();
+
+        // 2. Pass stream directly into ZXing video element decoder
+        codeReader.decodeFromVideoElement(videoElem, (result, err) => {
+          if (result) {
+            const code = result.getText();
+            resultText.textContent = code;
+            resultFormat.textContent = result.getBarcodeFormat();
+
+            if (navigator.vibrate) navigator.vibrate(100);
+
+            handleInventoryLookup(code);
+          }
+        });
+
       } catch (err) {
-        alert('Could not start camera: ' + err.message);
-        isScanning = false;
-        toggleBtn.textContent = 'Start Camera';
+        alert('Could not start camera stream: ' + err.message);
+        stopScanner();
       }
     });
+
+    function stopScanner() {
+      isScanning = false;
+      if (codeReader) {
+        codeReader.reset();
+      }
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+        currentStream = null;
+      }
+      toggleBtn.textContent = 'Start Camera';
+    }
 
     function handleInventoryLookup(code) {
       if (code === lastScannedCode) return;

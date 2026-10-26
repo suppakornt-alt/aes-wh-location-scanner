@@ -53,7 +53,7 @@
   </div>
 
   <div class="card">
-    <strong>Scanned number:</strong>
+    <strong>Scanned Lot Number:</strong>
     <div id="result">Waiting to scan...</div>
     <div style="color:#64748b;font-size:.9rem">Format: <span id="format">-</span></div>
     <button id="copy-btn" style="margin-top:.6rem">Copy</button>
@@ -87,18 +87,17 @@
     let sampleBuffer = [];
     const REQUIRED_SAMPLES = 5;
 
+    // Regular Expression for exactly 7 numeric digits
+    const LOT_PATTERN = /^\d{7}$/;
+
     // Mock Database Lookup Table
     const mockDB = {
-      "8850123456789": {
-        name: "Industrial Bearing Pack 10mm",
+      "2606053": {
+        name: "Industrial Bearing Pack 10mm (Lot #2606053)",
         locations: [
           { code: "A-01-02", qty: 45 },
           { code: "B-04-12", qty: 12 }
         ]
-      },
-      "123456789012": {
-        name: "Hex Bolt M8 x 50mm",
-        locations: [{ code: "C-02-01", qty: 150 }]
       }
     };
 
@@ -107,10 +106,18 @@
       warnEl.textContent = 'This looks like an in-app browser (LINE/Facebook/etc). Camera may be blocked. Please open this link in Chrome or Safari.';
     }
 
-    // Process sample reads and extract the most frequent value
+    // Process raw scan and enforce 7-digit lot number rule
     function processRawScan(code, format) {
-      sampleBuffer.push({ code, format });
-      statusEl.textContent = `Verifying barcode... (${sampleBuffer.length}/${REQUIRED_SAMPLES})`;
+      const cleanCode = code.trim();
+
+      // Enforce strict 7-digit numeric pattern match
+      if (!LOT_PATTERN.test(cleanCode)) {
+        statusEl.textContent = 'Ignoring invalid format (Must be 7 digits)';
+        return; // Ignore and continue scanning next frame
+      }
+
+      sampleBuffer.push({ code: cleanCode, format });
+      statusEl.textContent = `Verifying Lot Number... (${sampleBuffer.length}/${REQUIRED_SAMPLES})`;
 
       if (sampleBuffer.length >= REQUIRED_SAMPLES) {
         // Calculate the most frequent code (mode)
@@ -136,7 +143,7 @@
     function onCodeConfirmed(code, format) {
       resultEl.textContent = code;
       formatEl.textContent = format;
-      statusEl.textContent = 'Verified & Scanned!';
+      statusEl.textContent = 'Verified 7-Digit Lot Number!';
       if (navigator.vibrate) navigator.vibrate(100);
 
       handleInventoryLookup(code);
@@ -144,7 +151,7 @@
 
     function handleInventoryLookup(code) {
       const data = mockDB[code] || {
-        name: "Unknown Product (New SKU)",
+        name: `Lot #${code} (New SKU)`,
         locations: [{ code: "RECEIVING-BAY", qty: 0 }]
       };
 
@@ -223,7 +230,7 @@
 
         running = true;
         toggleBtn.textContent = 'Stop Camera';
-        statusEl.textContent = 'Point at a barcode...';
+        statusEl.textContent = 'Point at 7-digit Lot barcode...';
 
         if ('BarcodeDetector' in window) {
           startNativeLoop();

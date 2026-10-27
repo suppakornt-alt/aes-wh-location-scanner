@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AES's Warehouse 3D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.0/umd/index.min.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM12 12l8-4.5M12 12v9M12 12L4 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M6 20h12M5 8h14M5 8l-3 7a3 3 0 006 0L5 8zM19 8l-3 7a3 3 0 006 0l-3-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 7h12l-3-3M17 17H5l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor"/></symbol>
+      <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 01-10 0c0-2 1-3 2-4 .3 1.5 1 2 1.8 2.3C10.5 8 11 5.5 12 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 20c1-4 4.5-6 8-6s7 2 8 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="13" r="4" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    </defs>
+  </svg>
+
+  <div id="scrim" onclick="closeSidebar()"></div>
+
+  <aside id="sidebar" aria-label="เมนูหลัก">
+    <div class="sb-head">
+      <div class="brand">
+        <span class="brand-mark"><svg class="ic"><use href="#i-cube"/></svg></span>
+        <div>
+          <div class="brand-name">AES Warehouse</div>
+          <div class="brand-sub">ระบบจัดการพิกัดคลังสินค้า</div>
+        </div>
+      </div>
+      <button class="icon-btn sb-close" onclick="closeSidebar()" aria-label="ปิดเมนู"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="sb-scroll">
+      <button class="btn btn-primary btn-block" onclick="openNewLocationModal(); closeSidebar();">
+        <svg class="ic"><use href="#i-plus"/></svg> เพิ่มพิกัดสินค้า
+      </button>
+      <div class="sb-label">เมนู</div>
+      <nav class="sb-nav">
+        <!-- Scanner set as default active view -->
+        <button class="nav-item active" data-view="scanner" onclick="switchView('scanner')">
+          <svg class="ic"><use href="#i-camera"/></svg><span>สแกนเนอร์บาร์โค้ด</span>
+        </button>
+        <button class="nav-item" data-view="3d" onclick="switchView('3d')">
+          <svg class="ic"><use href="#i-cube"/></svg><span>แผนผังคลัง 3D</span>
+        </button>
+        <button class="nav-item" data-view="ops" onclick="switchView('ops')">
+          <svg class="ic"><use href="#i-list"/></svg><span>จัดการหยิบ / เติม / ย้าย</span>
+        </button>
+        <button class="nav-item" data-view="audit" onclick="switchView('audit')">
+          <svg class="ic"><use href="#i-scale"/></svg><span>ตรวจสอบยอด ERP</span>
+        </button>
+      </nav>
+      <div id="tools-3d" style="display:none;">
+        <div class="sb-label">ค้นหา</div>
+        <div class="search-box">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <input type="text" id="search-input" placeholder="ค้นหารหัสสินค้า (SKU)" onkeydown="if(event.key==='Enter') searchSKU()" />
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="searchSKU()">ค้นหา</button>
+          <button class="btn btn-ghost" onclick="resetSearch()">รีเซ็ต</button>
+        </div>
+        <div class="sb-label">มุมมอง</div>
+        <div class="acc">
+          <button class="acc-head" onclick="toggleAccordion('legend-content', 'legend-arrow')">
+            <span>ประเภทสินค้า</span>
+            <svg id="legend-arrow" class="ic ic-sm acc-arrow"><use href="#i-chevron"/></svg>
+          </button>
+          <div id="legend-content" class="acc-body"><div id="legend-list"></div></div>
+        </div>
+        <div class="acc">
+          <button class="acc-head" onclick="toggleAccordion('velocity-content', 'velocity-arrow')">
+            <span>ความเคลื่อนไหวสินค้า</span>
+            <svg id="velocity-arrow" class="ic ic-sm acc-arrow"><use href="#i-chevron"/></svg>
+          </button>
+          <div id="velocity-content" class="acc-body">
+            <button id="heatmap-toggle-btn" class="btn btn-outline btn-block" onclick="toggleHeatmapMode()">
+              <svg class="ic"><use href="#i-flame"/></svg><span id="heatmap-label">เปิด Heatmap</span>
+            </button>
+            <div class="velocity-progress-container">
+              <div id="bar-fast" class="v-bar v-bar-fast" style="width: 0%;"></div>
+              <div id="bar-medium" class="v-bar v-bar-medium" style="width: 0%;"></div>
+              <div id="bar-slow" class="v-bar v-bar-slow" style="width: 0%;"></div>
+              <div id="bar-dead" class="v-bar v-bar-dead" style="width: 0%;"></div>
+            </div>
+            <div class="velocity-sku-total" id="velocity-total-sku-label">คำนวณจาก 0 SKUs ทั้งหมด</div>
+            <div class="legend-item" onclick="filterByCriteria('FAST')"><span class="legend-dot" style="background:#238636"></span><span class="legend-name">FAST · ขายเร็ว</span><span class="pct-badge" id="pct-fast">0%</span></div>
+            <div class="legend-item" onclick="filterByCriteria('MEDIUM')"><span class="legend-dot" style="background:#e3b341"></span><span class="legend-name">MEDIUM · ปานกลาง</span><span class="pct-badge" id="pct-medium">0%</span></div>
+            <div class="legend-item" onclick="filterByCriteria('SLOW')"><span class="legend-dot" style="background:#f0883e"></span><span class="legend-name">SLOW · เริ่มช้า</span><span class="pct-badge" id="pct-slow">0%</span></div>
+            <div class="legend-item" onclick="filterByCriteria('DEAD')"><span class="legend-dot" style="background:#da3633"></span><span class="legend-name">DEAD · สต็อกนิ่ง</span><span class="pct-badge pct-badge-dead" id="pct-dead">0%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sb-foot">
+      <div class="sb-user"><svg class="ic ic-sm"><use href="#i-user"/></svg><span id="sidebar-user">...</span></div>
+      <button class="icon-btn" onclick="toggleTheme()" title="สลับโหมดสว่าง/มืด"><svg class="ic"><use href="#i-theme"/></svg></button>
+    </div>
+  </aside>
+
+  <div id="main">
+    <header id="topbar">
+      <button class="icon-btn menu-btn" onclick="openSidebar()" aria-label="เปิดเมนู"><svg class="ic"><use href="#i-menu"/></svg></button>
+      <h1 id="page-title">สแกนเนอร์บาร์โค้ด</h1>
+      <button class="btn btn-primary btn-sm topbar-add" onclick="openNewLocationModal()">
+        <svg class="ic ic-sm"><use href="#i-plus"/></svg><span>เพิ่มพิกัด</span>
+      </button>
+    </header>
+
+    <div id="views">
+      <!-- VIEW 1: Scanner (Default) -->
+      <div id="view-scanner" class="app-view scroll-view">
+        <div class="page-wrap" style="align-items: center; padding-top: 20px;">
+          <div id="warn" style="color: var(--accent-red); margin-bottom: 10px; font-size: 0.95rem; text-align: center;"></div>
+          <button id="toggle-btn" class="btn btn-primary" style="margin-bottom: 10px;">เปิดกล้องสแกน</button>
+          <div id="status" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px; min-height: 20px;"></div>
+
+          <div class="scanner-container" style="position: relative; max-width: 480px; width: 100%; margin: 0 auto 20px; border-radius: 12px; overflow: hidden; background: #000;">
+            <video id="video" playsinline muted style="width: 100%; height: 320px; object-fit: cover; display: block;"></video>
+            <div class="overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 40%; border: 2px dashed rgba(255,255,255,.85); border-radius: 8px; pointer-events: none;"></div>
+          </div>
+
+          <!-- Active Scan Result Area -->
+          <div id="scanner-result-card" class="type-group-block" style="width: 100%; max-width: 480px; display: none;">
+            <div class="type-group-header">
+              <div class="type-title-badge">รหัสที่สแกนได้: <span id="format" style="color: var(--text-muted); font-weight: 400; font-size: 12px; margin-left: 8px;">-</span></div>
+            </div>
+            <div id="result" style="font-size: 1.6rem; font-weight: 700; color: var(--accent-blue); text-align: center; margin: 10px 0; word-break: break-all;">-</div>
+            
+            <div id="scanner-inventory-details" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 5px;">
+              <div id="scanner-product-name" style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-primary); text-align: left;">-</div>
+              <div id="scanner-locations-list" class="loc-pills-container"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 2: 3D -->
+      <div id="view-3d" class="app-view" style="display:none;">
+        <div id="loader"><span class="spinner"></span> กำลังดึงข้อมูลตำแหน่งสต็อก...</div>
+        <div id="tooltip"></div>
+        <div id="canvas-container"></div>
+        <div id="detail-card"></div>
+      </div>
+
+      <!-- VIEW 3: Operations -->
+      <div id="view-ops" class="app-view scroll-view" style="display:none;">
+        <div class="page-wrap">
+          <div class="sticky-header-container">
+            <div class="page-head">
+              <div>
+                <h2>จัดการสินค้าคงคลัง</h2>
+                <span class="page-sub">จัดกลุ่มตามประเภทสินค้า และชื่อสินค้า</span>
+              </div>
+              <div class="search-box">
+                <svg class="ic"><use href="#i-search"/></svg>
+                <input type="text" id="ops-filter" placeholder="ค้นหาชื่อ หรือ SKU..." oninput="filterOpsList()" />
+              </div>
+            </div>
+          </div>
+          <div id="stock-list-container"></div>
+        </div>
+      </div>
+
+      <!-- VIEW 4: Audit -->
+      <div id="view-audit" class="app-view scroll-view" style="display:none;">
+        <div class="page-wrap">
+          <div class="sticky-header-container">
+            <div class="page-head">
+              <div>
+                <h2>ตรวจสอบยอด ERP เทียบกับพิกัดจริง</h2>
+                <span id="audit-summary-badge" class="page-sub">กำลังคำนวณ...</span>
+              </div>
+              <div class="search-box">
+                <svg class="ic"><use href="#i-search"/></svg>
+                <input type="text" id="audit-filter" placeholder="ค้นหา SKU หรือชื่อสินค้า..." oninput="filterAuditList()" />
+              </div>
+            </div>
+            <div class="kpi-grid">
+              <div class="kpi-card orange"><span class="kpi-num" id="kpi-unassigned">0</span><span class="kpi-title">ยังไม่ระบุพิกัด</span></div>
+              <div class="kpi-card red"><span class="kpi-num" id="kpi-under">0</span><span class="kpi-title">ขาด (น้อยกว่า ERP)</span></div>
+              <div class="kpi-card purple"><span class="kpi-num" id="kpi-over">0</span><span class="kpi-title">เกิน (มากกว่า ERP)</span></div>
+            </div>
+          </div>
+          <div id="audit-list-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal containers omitted here for brevity, they remain identical to your original code. I will include them in app.js insertion logic if needed, or you can paste your existing modals right here above the scripts. -->
+  <div id="modal-container-inject"></div>
+
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

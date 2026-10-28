@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&display=swap" rel="stylesheet">
-  
+
   <link rel="stylesheet" href="style.css">
   
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -265,6 +265,115 @@
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeRelocateModal()">ยกเลิก</button>
         <button class="btn btn-primary" onclick="submitRelocate()">ยืนยันการย้าย</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============ MODAL: Add Location (TrueMoney Segmented Style) ============ -->
+  <div id="modal-add" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3>เพิ่มพิกัดสินค้าใหม่</h3>
+          <span class="user-badge">ลงทะเบียนตำแหน่งสต็อก</span>
+        </div>
+        <button class="icon-btn" onclick="closeNewLocationModal()" aria-label="ปิด">
+          <svg class="ic"><use href="#i-close"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- TrueMoney Segmented Tab Control -->
+        <div class="segmented-control">
+          <button type="button" class="segment-btn active" id="seg-btn-scan" onclick="switchAddMode('scan')">
+            <svg class="ic ic-sm"><use href="#i-camera"/></svg> สแกนบาร์โค้ด
+          </button>
+          <button type="button" class="segment-btn" id="seg-btn-type" onclick="switchAddMode('type')">
+            <svg class="ic ic-sm"><use href="#i-search"/></svg> คีย์เลข Lot เอง
+          </button>
+        </div>
+
+        <!-- Mode 1: Mini Scan Box -->
+        <div id="add-mode-scan" class="add-mode-view">
+          <div class="mini-scanner-box">
+            <video id="add-modal-video" playsinline muted></video>
+            <div class="mini-overlay"></div>
+          </div>
+          <button type="button" id="add-modal-camera-toggle" class="btn btn-outline btn-block" onclick="toggleModalCamera()">เปิดกล้องสแกน</button>
+          <div id="add-modal-scan-status" class="mini-scan-status">พร้อมสำหรับการสแกน</div>
+        </div>
+
+        <!-- Mode 2: Manual Input Box -->
+        <div id="add-mode-type" class="add-mode-view" style="display:none;">
+          <label>ระบุ Lot Number (7 หลัก)</label>
+          <div class="input-with-action">
+            <input type="text" id="add-manual-lot-input" placeholder="เช่น 2410069" maxlength="7" inputmode="numeric" />
+            <button type="button" class="btn btn-primary btn-sm" onclick="triggerManualLotLookup()">ค้นหา</button>
+          </div>
+        </div>
+
+        <!-- Resolved Product Card -->
+        <div id="add-product-preview-card" class="prod-name-card" style="display:none; margin-top:8px;">
+          <div class="prod-top">
+            <div class="prod-name-title" id="add-preview-name">-</div>
+            <span class="chip" id="add-preview-code">-</span>
+          </div>
+          <div class="prod-meta-subtitle">
+            <span><strong>หมวด:</strong> <span id="add-preview-type">-</span></span>
+            <span><strong>แบรนด์:</strong> <span id="add-preview-brand">-</span></span>
+            <span><strong>หน่วย:</strong> <span id="add-preview-unit">ชิ้น</span></span>
+          </div>
+        </div>
+
+        <!-- Hidden values for submission -->
+        <input type="hidden" id="add-resolved-sku" />
+        <input type="hidden" id="add-resolved-name" />
+        <input type="hidden" id="add-resolved-type" />
+        <input type="hidden" id="add-resolved-brand" />
+
+        <!-- Lot Number to Register (Editable FIFO selector) -->
+        <div id="add-lot-field-group" style="display:none;">
+          <label>Lot Number ที่จะบันทึกเข้าพิกัดนี้ <small>(แก้ไขได้หากต้องการแยกกองตาม FIFO)</small></label>
+          <input type="text" id="add-final-lot" maxlength="7" inputmode="numeric" placeholder="7 หลัก" />
+
+          <!-- Coordinate Picker Grid (Identical to Relocate) -->
+          <div class="field-grid">
+            <div>
+              <label>เสา/แถว เริ่มต้น</label>
+              <div class="coord-picker-grid">
+                <select id="add-col-start"></select>
+                <select id="add-row-start"></select>
+              </div>
+            </div>
+            <div>
+              <label>เสา/แถว สิ้นสุด</label>
+              <div class="coord-picker-grid">
+                <select id="add-col-end"></select>
+                <select id="add-row-end"></select>
+              </div>
+            </div>
+          </div>
+
+          <label>ชั้นวาง (เลือกได้มากกว่า 1 ชั้น)</label>
+          <div class="level-btn-row" id="level-selector-add">
+            <button type="button" class="level-sq-btn active" data-lvl="1" onclick="toggleLevelBtn(this)">1</button>
+            <button type="button" class="level-sq-btn" data-lvl="2" onclick="toggleLevelBtn(this)">2</button>
+            <button type="button" class="level-sq-btn" data-lvl="3" onclick="toggleLevelBtn(this)">3</button>
+            <button type="button" class="level-sq-btn" data-lvl="4" onclick="toggleLevelBtn(this)">4</button>
+            <button type="button" class="level-sq-btn" data-lvl="5" onclick="toggleLevelBtn(this)">5</button>
+            <button type="button" class="level-sq-btn" data-lvl="6" onclick="toggleLevelBtn(this)">6</button>
+            <button type="button" class="level-sq-btn" data-lvl="7" onclick="toggleLevelBtn(this)">7</button>
+          </div>
+
+          <label>จำนวนที่จัดเก็บ</label>
+          <input type="number" id="add-qty" inputmode="numeric" pattern="[0-9]*" placeholder="0" />
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeNewLocationModal()">ยกเลิก</button>
+        <button class="btn btn-primary" id="btn-submit-add" onclick="submitNewLocation()" disabled>บันทึกพิกัดใหม่</button>
       </div>
     </div>
   </div>

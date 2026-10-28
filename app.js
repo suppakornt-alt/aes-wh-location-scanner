@@ -193,9 +193,15 @@ function renderAuditList(data) {
 }
 
 function handleListAction(e) {
-  const btn = e.target.closest('[data-act]'); if (!btn) return;
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
   const { act, loc, sku, qty, unit } = btn.dataset;
-  if (act === 'in' || act === 'out') handleStockAction(act, loc, sku, unit, Number(qty));
+  
+  if (act === 'in' || act === 'out') {
+    handleStockAction(act, loc, sku, unit, Number(qty));
+  } else if (act === 'move') {
+    openRelocateModal(loc, sku, Number(qty), unit);
+  }
 }
 
 // --- Fetch Actions ---
@@ -302,8 +308,114 @@ function stopScanner() {
   video.srcObject = null; toggleBtn.textContent = 'เปิดกล้องสแกน';
 }
 
+// --- Handle and dropdown population
+function initCoordDropdowns() {
+  const cols = [];
+  for (let i = 1; i <= 60; i++) {
+    let num = i, s = "";
+    while (num > 0) {
+      const rem = (num - 1) % 26;
+      s = String.fromCharCode(65 + rem) + s;
+      num = Math.floor((num - 1) / 26);
+    }
+    cols.push(s);
+  }
+
+  ['relocate-col-start', 'relocate-col-end'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = cols.map(c => `<option value="${c}">เสา ${c}</option>`).join('');
+  });
+
+  const rowOptions = Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}">แถว ${i + 1}</option>`).join('');
+  ['relocate-row-start', 'relocate-row-end'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = rowOptions;
+  });
+
+  const link = (startId, endId) => {
+    const startEl = document.getElementById(startId);
+    if (startEl) {
+      startEl.onchange = (e) => {
+        const endEl = document.getElementById(endId);
+        if (endEl) endEl.value = e.target.value;
+      };
+    }
+  };
+  link('relocate-col-start', 'relocate-col-end');
+  link('relocate-row-start', 'relocate-row-end');
+}
+
+function toggleLevelBtn(btn) {
+  btn.classList.toggle('active');
+  if (btn.parentElement.querySelectorAll('.level-sq-btn.active').length === 0) {
+    btn.classList.add('active');
+  }
+}
+
+function getSelectedLevels(containerId) {
+  const btns = document.querySelectorAll(`#${containerId} .level-sq-btn.active`);
+  return Array.from(btns).map(b => parseInt(b.getAttribute('data-lvl'), 10));
+}
+
+function openRelocateModal(locId, sku, currentQty, unitText) {
+  const modal = document.getElementById('modal-relocate');
+  modal.style.display = 'flex';
+  document.getElementById('relocate-loc-id').value = locId;
+  document.getElementById('relocate-sku-title').innerText = `${sku} · คงเหลือ ${currentQty} ${unitText}`;
+  document.getElementById('relocate-qty').value = currentQty;
+  document.getElementById('relocate-qty').setAttribute('max', currentQty);
+}
+
+function closeRelocateModal() {
+  document.getElementById('modal-relocate').style.display = 'none';
+}
+
+async function submitRelocate() {
+  const locId = document.getElementById('relocate-loc-id').value;
+  const qtyToMove = Number(document.getElementById('relocate-qty').value);
+  const maxQty = Number(document.getElementById('relocate-qty').getAttribute('max') || Infinity);
+
+  if (!qtyToMove || qtyToMove <= 0 || qtyToMove > maxQty) {
+    Swal.fire({ icon: 'warning', title: 'แจ้งเตือน', text: 'กรุณากรอกจำนวนที่ถูกต้อง (ไม่เกินยอดคงเหลือ)' });
+    return;
+  }
+
+  const payload = {
+    locId: locId,
+    qtyToMove: qtyToMove,
+    newColStart: document.getElementById('relocate-col-start').value,
+    newRowStart: Number(document.getElementById('relocate-row-start').value),
+    newColEnd: document.getElementById('relocate-col-end').value,
+    newRowEnd: Number(document.getElementById('relocate-row-end').value),
+    newLevels: getSelectedLevels('level-selector-relocate')
+  };
+
+  Swal.fire({
+    title: 'กำลังย้ายพิกัด...',
+    didOpen: () => Swal.showLoading(),
+    allowOutsideClick: false
+  });
+
+  const res = await safeFetch('relocate', payload);
+
+  if (res && res.success) {
+    closeRelocateModal();
+    Swal.fire({ icon: 'success', title: 'ย้ายพิกัดสำเร็จ', timer: 1400, showConfirmButton: false });
+    loadData();
+    
+    // Refresh scanner results if currently on scanner view
+    if (currentView === 'scanner') {
+      const activeLot = document.getElementById('result-lot').textContent;
+      if (activeLot && activeLot !== '-') handleScannerLookup(activeLot);
+    }
+  } else {
+    Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: res ? res.message : 'API Failed' });
+  }
+}
+
 // --- Init ---
 window.onload = () => {
+  initCoordDropdowns();
   initThree();
   document.getElementById('stock-list-container').addEventListener('click', handleListAction);
   document.getElementById('audit-list-container').addEventListener('click', handleListAction);

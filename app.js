@@ -208,12 +208,14 @@ function renderAuditList(data) {
 function handleListAction(e) {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
-  const { act, loc, sku, qty, unit } = btn.dataset;
+  const { act, loc, sku, qty, unit, lot } = btn.dataset;
   
   if (act === 'in' || act === 'out') {
     handleStockAction(act, loc, sku, unit, Number(qty));
   } else if (act === 'move') {
     openRelocateModal(loc, sku, Number(qty), unit);
+  } else if (act === 'edit-lot') {
+    promptEditLot(loc, sku, lot);
   }
 }
 
@@ -423,6 +425,81 @@ async function submitRelocate() {
     }
   } else {
     Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: res ? res.message : 'API Failed' });
+  }
+}
+
+
+// ----------------------- Add lot adjustment function -----
+async function promptEditLot(locId, sku, currentLot) {
+  const isDark = currentTheme === 'dark';
+  const { value: newLot } = await Swal.fire({
+    title: 'แก้ไข Lot Number',
+    html: `
+      <div style="text-align:left; font-size:13px; line-height:1.6; color:var(--text-muted);">
+        <strong>SKU:</strong> ${esc(sku)}<br>
+        <strong>Lot เดิม:</strong> ${currentLot ? esc(currentLot) : '<em>(ยังไม่ระบุ)</em>'}
+      </div>
+    `,
+    input: 'text',
+    inputLabel: 'ระบุ Lot Number ใหม่ (7 หลัก)',
+    inputValue: currentLot || '',
+    inputPlaceholder: 'เช่น 2610071',
+    inputAttributes: {
+      maxlength: 15,
+      autocapitalize: 'off',
+      autocorrect: 'off'
+    },
+    showCancelButton: true,
+    confirmButtonText: 'บันทึก',
+    cancelButtonText: 'ยกเลิก',
+    background: isDark ? '#161b22' : '#ffffff',
+    color: isDark ? '#e6edf3' : '#1f2328',
+    confirmButtonColor: '#238636',
+    cancelButtonColor: '#30363d',
+    preConfirm: (val) => {
+      const clean = (val || '').trim();
+      return clean; // Allows saving or clearing
+    }
+  });
+
+  if (newLot === undefined) return; // Cancelled
+
+  Swal.fire({
+    title: 'กำลังอัปเดต Lot...',
+    didOpen: () => Swal.showLoading(),
+    allowOutsideClick: false,
+    background: isDark ? '#161b22' : '#ffffff',
+    color: isDark ? '#e6edf3' : '#1f2328'
+  });
+
+  const res = await safeFetch('updateLot', { locId, newLot });
+
+  if (res && res.success) {
+    Swal.fire({
+      icon: 'success',
+      title: 'อัปเดต Lot สำเร็จ',
+      timer: 1200,
+      showConfirmButton: false,
+      background: isDark ? '#161b22' : '#ffffff',
+      color: isDark ? '#e6edf3' : '#1f2328'
+    });
+
+    // Refresh current view
+    loadData();
+    if (currentView === 'scanner') {
+      const activeLot = document.getElementById('result-lot').textContent;
+      if (activeLot && activeLot !== '-') {
+        handleScannerLookup(activeLot);
+      }
+    }
+  } else {
+    Swal.fire({
+      icon: 'error',
+      title: 'เกิดข้อผิดพลาด',
+      text: res ? res.message : 'API Failed',
+      background: isDark ? '#161b22' : '#ffffff',
+      color: isDark ? '#e6edf3' : '#1f2328'
+    });
   }
 }
 

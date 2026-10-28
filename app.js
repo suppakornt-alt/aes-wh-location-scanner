@@ -148,12 +148,25 @@ function animate() { requestAnimationFrame(animate); controls.update(); renderer
 
 // --- List Renderers ---
 function locRowHTML(loc, sku, unit) {
-  const attrs = `data-loc="${esc(loc.locId)}" data-sku="${esc(sku)}" data-qty="${esc(loc.qty)}" data-unit="${esc(unit)}"`;
+  const currentLot = loc.lotNo ? esc(loc.lotNo) : '';
+  const lotLabel = currentLot ? `LOT: ${currentLot}` : `+ ระบุ Lot`;
+  const emptyClass = currentLot ? '' : 'lot-pill-empty';
+
+  const attrs = `data-loc="${esc(loc.locId)}" data-sku="${esc(sku)}" data-qty="${esc(loc.qty)}" data-unit="${esc(unit)}" data-lot="${currentLot}"`;
+
   return `
     <div class="loc-pill-item">
-      <div class="loc-info">
-        <span class="loc-pill-text">${icon('pin')} ${esc(loc.displayLoc || loc.code)}</span>
-        <span class="loc-pill-qty">${esc(loc.qty)} ${esc(unit)}</span>
+      <div class="loc-info" style="display:flex; flex-direction:column; align-items:flex-start; gap:2px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="loc-pill-text">${icon('pin')} ${esc(loc.displayLoc || loc.code)}</span>
+          <span class="loc-pill-qty">${esc(loc.qty)} ${esc(unit)}</span>
+        </div>
+        <div class="loc-meta-sub">
+          <button type="button" class="lot-pill-editable ${emptyClass}" data-act="edit-lot" ${attrs} title="แตะเพื่อแก้ไข Lot">
+            <svg class="ic" style="width:12px; height:12px;"><use href="#i-edit"/></svg>
+            <span class="lot-val">${lotLabel}</span>
+          </button>
+        </div>
       </div>
       <div class="action-btn-group">
         <button class="btn-op btn-in" data-act="in" ${attrs}>${icon('plus')} เติม</button>

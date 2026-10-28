@@ -1,3 +1,4 @@
+// app.js
 let scene, camera, renderer, controls, gridHelper, floorMesh;
 const items = [];
 let masterStaffItems = [], masterAuditItems = [], masterCatalog = [];
@@ -39,7 +40,7 @@ async function switchView(viewName) {
   if (viewName === '3d') resizeRenderer();
   else if (viewName === 'audit' && masterAuditItems.length === 0) await loadAuditData();
   
-  if (viewName !== 'scanner') stopScanner(); // Kill camera if leaving view
+  if (viewName !== 'scanner') stopScanner(); 
   closeSidebarIfMobile();
 }
 
@@ -196,7 +197,10 @@ async function handleStockAction(actionType, locId, sku, unit, maxQty = 0) {
   if (res && res.success) {
     Swal.fire({ icon: 'success', title: 'สำเร็จ', timer: 1200, showConfirmButton: false });
     loadData();
-    if (currentView === 'scanner') handleScannerLookup(sku);
+    if (currentView === 'scanner') {
+      const activeLot = document.getElementById('result-lot').textContent;
+      if (activeLot !== '-') handleScannerLookup(activeLot);
+    }
   } else { Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: res ? res.message : 'API Failed' }); }
 }
 
@@ -211,7 +215,7 @@ async function loadData() {
 }
 
 // --- Scanner Logic ---
-const video = document.getElementById('video'), toggleBtn = document.getElementById('toggle-btn'), statusEl = document.getElementById('status'), resultEl = document.getElementById('result'), formatEl = document.getElementById('format');
+const video = document.getElementById('video'), toggleBtn = document.getElementById('toggle-btn'), statusEl = document.getElementById('status'), resultLotEl = document.getElementById('result-lot');
 let stream = null, running = false, timerId = null, sampleBuffer = [];
 const REQUIRED_SAMPLES = 5, LOT_PATTERN = /^\d{7}$/;
 
@@ -227,22 +231,39 @@ function processRawScan(code, format) {
 }
 
 function onCodeConfirmed(code, format) {
-  resultEl.textContent = code; formatEl.textContent = format; statusEl.textContent = 'ยืนยันรหัสสำเร็จ!';
+  resultLotEl.textContent = code;
+  statusEl.textContent = 'ยืนยันรหัสสำเร็จ!';
   if (navigator.vibrate) navigator.vibrate(100);
   handleScannerLookup(code);
 }
 
-async function handleScannerLookup(code) {
+async function handleScannerLookup(lotCode) {
   document.getElementById('scanner-result-card').style.display = 'flex';
   document.getElementById('scanner-inventory-details').style.display = 'none';
-  statusEl.textContent = 'กำลังดึงข้อมูล...';
-  const res = await safeFetch('lookup', { sku: code });
+  statusEl.textContent = 'กำลังค้นหาฐานข้อมูล...';
+  
+  const res = await safeFetch('lookup', { lot: lotCode }); 
+  
   if (res && res.success) {
-    document.getElementById('scanner-product-name').textContent = res.data.name;
-    document.getElementById('scanner-locations-list').innerHTML = res.data.locations.map(l => locRowHTML(l, code, l.unit)).join('');
+    const data = res.data;
+    
+    if (data.productCode) {
+      document.getElementById('scanner-product-header').textContent = `${data.productCode} | ${data.productName}`;
+    } else {
+      document.getElementById('scanner-product-header').textContent = `[ไม่พบรหัสสินค้า] | ${data.productName}`;
+    }
+    
+    if (data.locations.length > 0) {
+      document.getElementById('scanner-locations-list').innerHTML = data.locations.map(l => locRowHTML(l, data.productCode, l.unit)).join('');
+    } else {
+      document.getElementById('scanner-locations-list').innerHTML = '<div class="empty-state" style="padding: 20px;">ไม่พบพิกัดจัดเก็บสำหรับสินค้านี้</div>';
+    }
+    
     document.getElementById('scanner-inventory-details').style.display = 'block';
     statusEl.textContent = 'โหลดข้อมูลเสร็จสิ้น';
-  } else { statusEl.textContent = 'ค้นหาไม่พบ หรือเกิดข้อผิดพลาด'; }
+  } else { 
+    statusEl.textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อ'; 
+  }
 }
 
 async function openCamera() {

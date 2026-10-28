@@ -149,7 +149,19 @@ function animate() { requestAnimationFrame(animate); controls.update(); renderer
 // --- List Renderers ---
 function locRowHTML(loc, sku, unit) {
   const attrs = `data-loc="${esc(loc.locId)}" data-sku="${esc(sku)}" data-qty="${esc(loc.qty)}" data-unit="${esc(unit)}"`;
-  return `<div class="loc-pill-item"><div class="loc-info"><span class="loc-pill-text">${icon('pin')} ${esc(loc.displayLoc || loc.code)}</span><span class="loc-pill-qty">${esc(loc.qty)} ${esc(unit)}</span></div><div class="action-btn-group"><button class="btn-op btn-in" data-act="in" ${attrs}>${icon('plus')} เติม</button><button class="btn-op btn-out" data-act="out" ${attrs}>${icon('minus')} เบิก</button></div></div>`;
+  return `
+    <div class="loc-pill-item">
+      <div class="loc-info">
+        <span class="loc-pill-text">${icon('pin')} ${esc(loc.displayLoc || loc.code)}</span>
+        <span class="loc-pill-qty">${esc(loc.qty)} ${esc(unit)}</span>
+      </div>
+      <div class="action-btn-group">
+        <button class="btn-op btn-in" data-act="in" ${attrs}>${icon('plus')} เติม</button>
+        <button class="btn-op btn-out" data-act="out" ${attrs}>${icon('minus')} เบิก</button>
+        <button class="btn-op btn-relocate" data-act="move" ${attrs}>${icon('swap')} ย้าย</button>
+      </div>
+    </div>
+  `;
 }
 function renderStaffList(list) {
   const c = document.getElementById('stock-list-container'); c.innerHTML = '';

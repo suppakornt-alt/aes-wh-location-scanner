@@ -131,32 +131,31 @@
     </header>
 
     <div id="views">
-      <!-- VIEW 1: Scanner (Default) -->
+      <!-- VIEW 1: Scanner (Default Landing Page) -->
       <div id="view-scanner" class="app-view scroll-view">
-        <div class="page-wrap" style="align-items: center; padding-top: 20px;">
-          <div id="warn" style="color: var(--accent-red); margin-bottom: 10px; font-size: 0.95rem; text-align: center;"></div>
+        <div class="page-wrap scanner-landing-wrap">
+          <div id="warn" class="scan-warning-msg"></div>
           <button id="toggle-btn" class="btn btn-primary" style="margin-bottom: 10px;">เปิดกล้องสแกน</button>
-          <div id="status" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px; min-height: 20px;"></div>
+          <div id="status" class="scan-status-msg"></div>
 
-          <!-- Element 1: Scanner -->
-          <div class="scanner-container" style="position: relative; max-width: 480px; width: 100%; margin: 0 auto 20px; border-radius: 12px; overflow: hidden; background: #000;">
-            <video id="video" playsinline muted style="width: 100%; height: 320px; object-fit: cover; display: block;"></video>
-            <div class="overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 40%; border: 2px dashed rgba(255,255,255,.85); border-radius: 8px; pointer-events: none;"></div>
+          <!-- Element 1: Scanner Viewport -->
+          <div class="scanner-container">
+            <video id="video" class="scanner-video-feed" playsinline muted></video>
+            <div class="overlay scanner-target-reticle"></div>
           </div>
 
           <!-- Active Scan Result Area -->
-          <div id="scanner-result-card" class="type-group-block" style="width: 100%; max-width: 480px; display: none;">
+          <div id="scanner-result-card" class="type-group-block scanner-card-wrapper" style="display: none;">
             <div class="type-group-header">
               <div class="type-title-badge">Lot Number ที่สแกนได้:</div>
             </div>
             
             <!-- Element 2: Scanned Lot Number -->
-            <div id="result-lot" style="font-size: 1.8rem; font-weight: 700; color: var(--accent-blue); text-align: center; margin: 5px 0;">-</div>
+            <div id="result-lot" class="scanner-lot-display">-</div>
             
-            <div id="scanner-inventory-details" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 5px;">
-              
+            <div id="scanner-inventory-details" class="scanner-details-pane" style="display: none;">
               <!-- Element 3: Product Code | Product Name -->
-              <div id="scanner-product-header" style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-primary); text-align: left;">-</div>
+              <div id="scanner-product-header" class="scanner-product-title">-</div>
               
               <!-- Element 4: Locations List -->
               <div id="scanner-locations-list" class="loc-pills-container"></div>

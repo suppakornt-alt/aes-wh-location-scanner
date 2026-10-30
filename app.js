@@ -638,7 +638,7 @@ function initCoordDropdowns() {
     if (el) el.innerHTML = cols.map(c => `<option value="${c}">เสา ${c}</option>`).join('');
   });
 
-  const rowOptions = Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}">แถว ${i + 1}</option>`).join('');
+  const rowOptions = Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
   ['relocate-row-start', 'relocate-row-end', 'add-row-start', 'add-row-end'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = rowOptions;

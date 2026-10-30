@@ -916,19 +916,32 @@ async function submitNewLocation() {
     return;
   }
 
+  // --- DEFENSIVE ROW PARSER (Guarantees pure integers, never NaN) ---
+  const parseSafeRow = (elementId) => {
+    const raw = String(document.getElementById(elementId)?.value || '');
+    const cleanDigits = raw.replace(/\D/g, ''); // Strips any "แถว", spaces, or symbols
+    const parsed = parseInt(cleanDigits, 10);
+    return isNaN(parsed) ? 1 : parsed;
+  };
+
+  const rStart = parseSafeRow('add-row-start');
+  const rEnd = parseSafeRow('add-row-end');
+
   const payload = {
     sku,
     name,
     type,
     brand,
     lotNo,
-    colStartStr: document.getElementById('add-col-start').value,
-    rowStartNum: Number(document.getElementById('add-row-start').value),
-    colEndStr: document.getElementById('add-col-end').value,
-    rowEndNum: Number(document.getElementById('add-row-end').value),
+    colStartStr: document.getElementById('add-col-start').value || 'A',
+    rowStartNum: rStart,
+    colEndStr: document.getElementById('add-col-end').value || 'A',
+    rowEndNum: rEnd,
     levelsArray: getSelectedLevels('level-selector-add'),
     qty: qty
   };
+
+  console.log("PAYLOAD DISPATCHING:", payload); // Verify in browser console that rStart and rEnd are pure numbers
 
   Swal.fire({ title: 'กำลังบันทึกพิกัดใหม่...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
 

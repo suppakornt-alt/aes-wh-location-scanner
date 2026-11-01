@@ -489,7 +489,7 @@ async function handleStockAction(actionType, locId, sku, unit, maxQty = 0) {
   const { value: qtyStr } = await Swal.fire({
     title: `${actionLabel}สต็อก`,
     html: `
-      <div style="text-align:left; font-size:13px; line-height:1.6; color:var(--text-muted); margin-bottom:8px;">
+      <div style="text-align:left; font-size:15px; line-height:1.6; color:var(--text-muted); margin-bottom:8px;">
         <strong>SKU:</strong> ${esc(sku)}<br>
         <strong>คงเหลือปัจจุบัน:</strong> ${maxQty} ${esc(unit)}
       </div>
@@ -549,7 +549,7 @@ async function promptEditLot(locId, sku, currentLot) {
   const { value: newLot } = await Swal.fire({
     title: 'แก้ไข Lot Number',
     html: `
-      <div style="text-align:left; font-size:13px; line-height:1.6; color:var(--text-muted); margin-bottom:8px;">
+      <div style="text-align:left; font-size:15px; line-height:1.6; color:var(--text-muted); margin-bottom:8px;">
         <strong>SKU:</strong> ${esc(sku)}<br>
         <strong>Lot เดิม:</strong> ${currentLot ? esc(currentLot) : '<em>(ยังไม่ระบุ)</em>'}
       </div>

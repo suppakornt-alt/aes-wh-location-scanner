@@ -80,8 +80,11 @@
               <div class="type-title-badge">ข้อมูลใบสั่ง</div>
             </div>
             <div class="of-field">
-              <label class="of-label" for="ord-input">เลข ORD</label>
-              <input type="text" id="ord-input" class="of-input" placeholder="เช่น ORD-2611001" autocomplete="off" autocapitalize="characters" />
+              <label class="of-label" for="ord-input">เลข ORD (กรอกเฉพาะตัวเลข)</label>
+              <div class="of-ord-wrap">
+                <span class="of-ord-prefix" id="ord-prefix">ORD-</span>
+                <input type="text" id="ord-input" class="of-input" placeholder="เช่น 2611001" inputmode="numeric" autocomplete="off" />
+              </div>
             </div>
           </div>
 

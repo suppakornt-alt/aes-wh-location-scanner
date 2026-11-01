@@ -3,386 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>AES's Warehouse 3D & Scanner</title>
+  <title>AES's Warehouse · เลือกทีม</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&display=swap" rel="stylesheet">
-
   <link rel="stylesheet" href="style.css">
-  
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.0/umd/index.min.js"></script>
 </head>
-<body>
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <defs>
-      <symbol id="i-edit" viewBox="0 0 24 24">
-        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </symbol>
-      
-      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
-      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
-      <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM12 12l8-4.5M12 12v9M12 12L4 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></symbol>
-      <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
-      <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M6 20h12M5 8h14M5 8l-3 7a3 3 0 006 0L5 8zM19 8l-3 7a3 3 0 006 0l-3-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
-      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
-      <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 7h12l-3-3M17 17H5l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
-      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-      <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor"/></symbol>
-      <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 01-10 0c0-2 1-3 2-4 .3 1.5 1 2 1.8 2.3C10.5 8 11 5.5 12 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
-      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 20c1-4 4.5-6 8-6s7 2 8 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="13" r="4" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
-    </defs>
-  </svg>
+<body class="chooser-body">
 
-  <div id="scrim" onclick="closeSidebar()"></div>
-
-  <aside id="sidebar" aria-label="เมนูหลัก">
-    <div class="sb-head">
-      <div class="brand">
-        <span class="brand-mark"><svg class="ic"><use href="#i-cube"/></svg></span>
-        <div>
-          <div class="brand-name">AES Warehouse</div>
-          <div class="brand-sub">ระบบจัดการพิกัดคลังสินค้า</div>
-        </div>
-      </div>
-      <button class="icon-btn sb-close" onclick="closeSidebar()" aria-label="ปิดเมนู"><svg class="ic"><use href="#i-close"/></svg></button>
-    </div>
-    <div class="sb-scroll">
-      <div class="sb-label">เมนู</div>
-      <nav class="sb-nav">
-        <button class="nav-item active" data-view="scanner" onclick="switchView('scanner')">
-          <svg class="ic"><use href="#i-camera"/></svg><span>สแกนเนอร์บาร์โค้ด</span>
-        </button>
-        <button class="nav-item" data-view="3d" onclick="switchView('3d')">
-          <svg class="ic"><use href="#i-cube"/></svg><span>แผนผังคลัง 3D</span>
-        </button>
-        <button class="nav-item" data-view="ops" onclick="switchView('ops')">
-          <svg class="ic"><use href="#i-list"/></svg><span>จัดการหยิบ / เติม / ย้าย</span>
-        </button>
-        <button class="nav-item" data-view="audit" onclick="switchView('audit')">
-          <svg class="ic"><use href="#i-scale"/></svg><span>ตรวจสอบยอด ERP</span>
-        </button>
-      </nav>
-      <div id="tools-3d" style="display:none;">
-        <div class="sb-label">ค้นหา</div>
-        <div class="search-box">
-          <svg class="ic"><use href="#i-search"/></svg>
-          <input type="text" id="search-input" placeholder="ค้นหารหัสสินค้า (SKU)" onkeydown="if(event.key==='Enter') searchSKU()" />
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="searchSKU()">ค้นหา</button>
-          <button class="btn btn-ghost" onclick="resetSearch()">รีเซ็ต</button>
-        </div>
-        <div class="sb-label">มุมมอง</div>
-        <div class="acc">
-          <button class="acc-head" onclick="toggleAccordion('legend-content', 'legend-arrow')">
-            <span>ประเภทสินค้า</span>
-            <svg id="legend-arrow" class="ic ic-sm acc-arrow"><use href="#i-chevron"/></svg>
-          </button>
-          <div id="legend-content" class="acc-body"><div id="legend-list"></div></div>
-        </div>
-        <div class="acc">
-          <button class="acc-head" onclick="toggleAccordion('velocity-content', 'velocity-arrow')">
-            <span>ความเคลื่อนไหวสินค้า</span>
-            <svg id="velocity-arrow" class="ic ic-sm acc-arrow"><use href="#i-chevron"/></svg>
-          </button>
-          <div id="velocity-content" class="acc-body">
-            <button id="heatmap-toggle-btn" class="btn btn-outline btn-block" onclick="toggleHeatmapMode()">
-              <svg class="ic"><use href="#i-flame"/></svg><span id="heatmap-label">เปิด Heatmap</span>
-            </button>
-            <div class="velocity-progress-container">
-              <div id="bar-fast" class="v-bar v-bar-fast" style="width: 0%;"></div>
-              <div id="bar-medium" class="v-bar v-bar-medium" style="width: 0%;"></div>
-              <div id="bar-slow" class="v-bar v-bar-slow" style="width: 0%;"></div>
-              <div id="bar-dead" class="v-bar v-bar-dead" style="width: 0%;"></div>
-            </div>
-            <div class="velocity-sku-total" id="velocity-total-sku-label">คำนวณจาก 0 SKUs ทั้งหมด</div>
-            <div class="legend-item" onclick="filterByCriteria('FAST')"><span class="legend-dot" style="background:#238636"></span><span class="legend-name">FAST · ขายเร็ว</span><span class="pct-badge" id="pct-fast">0%</span></div>
-            <div class="legend-item" onclick="filterByCriteria('MEDIUM')"><span class="legend-dot" style="background:#e3b341"></span><span class="legend-name">MEDIUM · ปานกลาง</span><span class="pct-badge" id="pct-medium">0%</span></div>
-            <div class="legend-item" onclick="filterByCriteria('SLOW')"><span class="legend-dot" style="background:#f0883e"></span><span class="legend-name">SLOW · เริ่มช้า</span><span class="pct-badge" id="pct-slow">0%</span></div>
-            <div class="legend-item" onclick="filterByCriteria('DEAD')"><span class="legend-dot" style="background:#da3633"></span><span class="legend-name">DEAD · สต็อกนิ่ง</span><span class="pct-badge pct-badge-dead" id="pct-dead">0%</span></div>
-          </div>
-        </div>
+  <main class="chooser-wrap">
+    <div class="chooser-brand">
+      <span class="brand-mark">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM12 12l8-4.5M12 12v9M12 12L4 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      </span>
+      <div>
+        <div class="brand-name">AES Warehouse</div>
+        <div class="brand-sub">ระบบจัดการพิกัดคลังสินค้า</div>
       </div>
     </div>
-    <div class="sb-foot">
-      <div class="sb-user"><svg class="ic ic-sm"><use href="#i-user"/></svg><span id="sidebar-user">...</span></div>
-      <button class="icon-btn" onclick="toggleTheme()" title="สลับโหมดสว่าง/มืด"><svg class="ic"><use href="#i-theme"/></svg></button>
+
+    <h1 class="chooser-title">เลือกทีมของคุณ</h1>
+    <p class="chooser-sub">แตะที่การ์ดเพื่อเข้าสู่หน้าจอของทีม</p>
+
+    <div class="chooser-grid">
+
+      <!-- Team 1: Pickers (forklift) -->
+      <a class="team-card team-picker" href="picker.html">
+        <span class="team-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 3v16M2 17h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 17v-6h8l2 3v3H8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M11 11V6h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="10" cy="19" r="1.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="17" cy="19" r="1.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          </svg>
+        </span>
+        <span class="team-name">ทีมจัดของ</span>
+        <span class="team-desc">สแกน Lot · เช็คพิกัด · หยิบสินค้า</span>
+      </a>
+
+      <!-- Team 2: Warehouse office (building) -->
+      <a class="team-card team-office" href="office.html">
+        <span class="team-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 21h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M5 21V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M15 9h3a1 1 0 0 1 1 1v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M8 7h4M8 11h4M8 15h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="team-name">ทีมออฟฟิศโกดัง</span>
+        <span class="team-desc">สร้างใบสั่งหยิบ · ส่งให้ทีมจัดของ</span>
+      </a>
+
     </div>
-  </aside>
+  </main>
 
-  <div id="main">
-    <header id="topbar">
-      <button class="icon-btn menu-btn" onclick="openSidebar()" aria-label="เปิดเมนู">
-        <svg class="ic"><use href="#i-menu"/></svg>
-      </button>
-      <h1 id="page-title">สแกนเนอร์บาร์โค้ด</h1>
-      <button class="icon-btn" onclick="openNewLocationModal()" aria-label="เพิ่มพิกัดใหม่" title="เพิ่มพิกัดใหม่">
-        <svg class="ic"><use href="#i-plus"/></svg>
-      </button>
-    </header>
-
-    <div id="views">
-      <!-- VIEW 1: Scanner (Default Landing Page) -->
-      <div id="view-scanner" class="app-view scroll-view">
-        <div class="page-wrap scanner-landing-wrap">
-          <div id="warn" class="scan-warning-msg"></div>
-          <button id="toggle-btn" class="btn btn-primary" style="margin-bottom: 10px;">เปิดกล้องสแกน</button>
-          <div id="status" class="scan-status-msg"></div>
-
-          <!-- Element 1: Scanner Viewport -->
-          <div class="scanner-container">
-            <video id="video" class="scanner-video-feed" playsinline muted></video>
-            <div class="overlay scanner-target-reticle"></div>
-          </div>
-
-          <!-- Active Scan Result Area -->
-          <div id="scanner-result-card" class="type-group-block scanner-card-wrapper" style="display: none;">
-            <div class="type-group-header">
-              <div class="type-title-badge">Lot Number ที่สแกนได้:</div>
-            </div>
-            
-            <!-- Element 2: Scanned Lot Number -->
-            <div id="result-lot" class="scanner-lot-display">-</div>
-            
-            <div id="scanner-inventory-details" class="scanner-details-pane" style="display: none;">
-              <!-- Element 3: Product Code | Product Name -->
-              <div id="scanner-product-header" class="scanner-product-title">-</div>
-              
-              <!-- Element 4: Locations List -->
-              <div id="scanner-locations-list" class="loc-pills-container"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- VIEW 2: 3D -->
-      <div id="view-3d" class="app-view" style="display:none;">
-        <div id="loader"><span class="spinner"></span> กำลังดึงข้อมูลตำแหน่งสต็อก...</div>
-        <div id="tooltip"></div>
-        <div id="canvas-container"></div>
-        <div id="detail-card"></div>
-      </div>
-
-      <!-- VIEW 3: Operations -->
-      <div id="view-ops" class="app-view scroll-view" style="display:none;">
-        <div class="page-wrap">
-          <div class="sticky-header-container">
-            <div class="page-head">
-              <div>
-                <h2>จัดการสินค้าคงคลัง</h2>
-                <span class="page-sub">จัดกลุ่มตามประเภทสินค้า และชื่อสินค้า</span>
-              </div>
-              <div class="search-box">
-                <svg class="ic"><use href="#i-search"/></svg>
-                <input type="text" id="ops-filter" placeholder="ค้นหาชื่อ หรือ SKU..." oninput="filterOpsList()" />
-              </div>
-            </div>
-          </div>
-          <div id="stock-list-container"></div>
-        </div>
-      </div>
-
-      <!-- VIEW 4: Audit -->
-      <div id="view-audit" class="app-view scroll-view" style="display:none;">
-        <div class="page-wrap">
-          <div class="sticky-header-container">
-            <div class="page-head">
-              <div>
-                <h2>ตรวจสอบยอด ERP เทียบกับพิกัดจริง</h2>
-                <span id="audit-summary-badge" class="page-sub">กำลังคำนวณ...</span>
-              </div>
-              <div class="search-box">
-                <svg class="ic"><use href="#i-search"/></svg>
-                <input type="text" id="audit-filter" placeholder="ค้นหา SKU หรือชื่อสินค้า..." oninput="filterAuditList()" />
-              </div>
-            </div>
-            <div class="kpi-grid">
-              <div class="kpi-card orange"><span class="kpi-num" id="kpi-unassigned">0</span><span class="kpi-title">ยังไม่ระบุพิกัด</span></div>
-              <div class="kpi-card red"><span class="kpi-num" id="kpi-under">0</span><span class="kpi-title">ขาด (น้อยกว่า ERP)</span></div>
-              <div class="kpi-card purple"><span class="kpi-num" id="kpi-over">0</span><span class="kpi-title">เกิน (มากกว่า ERP)</span></div>
-            </div>
-          </div>
-          <div id="audit-list-container"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ MODAL: Relocate ============ -->
-  <div id="modal-relocate" class="modal-overlay" style="display:none;">
-    <div class="modal-card">
-      <div class="modal-head">
-        <div>
-          <h3>ย้ายพิกัดสินค้า</h3>
-          <span id="relocate-sku-title" class="user-badge"></span>
-        </div>
-        <button class="icon-btn" onclick="closeRelocateModal()" aria-label="ปิด">
-          <svg class="ic"><use href="#i-close"/></svg>
-        </button>
-      </div>
-
-      <div class="modal-body">
-        <input type="hidden" id="relocate-loc-id" />
-        <input type="hidden" id="relocate-active-lot" />
-
-        <label>จำนวนที่ต้องการย้าย</label>
-        <input type="number" id="relocate-qty" inputmode="numeric" pattern="[0-9]*" />
-
-        <div class="field-grid">
-          <div>
-            <label>เสา/แถว เริ่มต้น</label>
-            <div class="coord-picker-grid">
-              <select id="relocate-col-start"></select>
-              <select id="relocate-row-start"></select>
-            </div>
-          </div>
-          <div>
-            <label>เสา/แถว สิ้นสุด</label>
-            <div class="coord-picker-grid">
-              <select id="relocate-col-end"></select>
-              <select id="relocate-row-end"></select>
-            </div>
-          </div>
-        </div>
-
-        <label>ชั้นวางปลายทาง (เลือกได้มากกว่า 1)</label>
-        <div class="level-btn-row" id="level-selector-relocate">
-          <button type="button" class="level-sq-btn active" data-lvl="1" onclick="toggleLevelBtn(this)">1</button>
-          <button type="button" class="level-sq-btn" data-lvl="2" onclick="toggleLevelBtn(this)">2</button>
-          <button type="button" class="level-sq-btn" data-lvl="3" onclick="toggleLevelBtn(this)">3</button>
-          <button type="button" class="level-sq-btn" data-lvl="4" onclick="toggleLevelBtn(this)">4</button>
-          <button type="button" class="level-sq-btn" data-lvl="5" onclick="toggleLevelBtn(this)">5</button>
-          <button type="button" class="level-sq-btn" data-lvl="6" onclick="toggleLevelBtn(this)">6</button>
-          <button type="button" class="level-sq-btn" data-lvl="7" onclick="toggleLevelBtn(this)">7</button>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="closeRelocateModal()">ยกเลิก</button>
-        <button class="btn btn-primary" onclick="submitRelocate()">ยืนยันการย้าย</button>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- ============ MODAL: Add Location (TrueMoney Segmented Style) ============ -->
-  <div id="modal-add" class="modal-overlay" style="display:none;">
-    <div class="modal-card">
-      <div class="modal-head">
-        <div>
-          <h3>เพิ่มพิกัดสินค้าใหม่</h3>
-          <span class="user-badge">ลงทะเบียนตำแหน่งสต็อก</span>
-        </div>
-        <button class="icon-btn" onclick="closeNewLocationModal()" aria-label="ปิด">
-          <svg class="ic"><use href="#i-close"/></svg>
-        </button>
-      </div>
-
-      <div class="modal-body">
-        <!-- TrueMoney Segmented Tab Control -->
-        <div class="segmented-control">
-          <button type="button" class="segment-btn active" id="seg-btn-scan" onclick="switchAddMode('scan')">
-            <svg class="ic ic-sm"><use href="#i-camera"/></svg> สแกนบาร์โค้ด
-          </button>
-          <button type="button" class="segment-btn" id="seg-btn-type" onclick="switchAddMode('type')">
-            <svg class="ic ic-sm"><use href="#i-search"/></svg> คีย์เลข Lot เอง
-          </button>
-        </div>
-
-        <!-- Mode 1: Mini Scan Box -->
-        <div id="add-mode-scan" class="add-mode-view">
-          <div class="mini-scanner-box">
-            <video id="add-modal-video" playsinline muted></video>
-            <div class="mini-overlay"></div>
-          </div>
-          <button type="button" id="add-modal-camera-toggle" class="btn btn-outline btn-block" onclick="toggleModalCamera()">เปิดกล้องสแกน</button>
-          <div id="add-modal-scan-status" class="mini-scan-status">พร้อมสำหรับการสแกน</div>
-        </div>
-
-        <!-- Mode 2: Manual Input Box -->
-        <div id="add-mode-type" class="add-mode-view" style="display:none;">
-          <label>ระบุ Lot Number (7 หลัก)</label>
-          <div class="input-with-action">
-            <input type="text" id="add-manual-lot-input" placeholder="เช่น 2410069" maxlength="7" inputmode="numeric" />
-            <button type="button" class="btn btn-primary btn-sm" onclick="triggerManualLotLookup()">ค้นหา</button>
-          </div>
-        </div>
-
-        <!-- Resolved Product Card -->
-        <div id="add-product-preview-card" class="prod-name-card" style="display:none; margin-top:8px;">
-          <div class="prod-top">
-            <div class="prod-name-title" id="add-preview-name">-</div>
-            <span class="chip" id="add-preview-code">-</span>
-          </div>
-          <div class="prod-meta-subtitle">
-            <span><strong>หมวด:</strong> <span id="add-preview-type">-</span></span>
-            <span><strong>แบรนด์:</strong> <span id="add-preview-brand">-</span></span>
-            <span><strong>หน่วย:</strong> <span id="add-preview-unit">ชิ้น</span></span>
-          </div>
-        </div>
-
-        <!-- Hidden values for submission -->
-        <input type="hidden" id="add-resolved-sku" />
-        <input type="hidden" id="add-resolved-name" />
-        <input type="hidden" id="add-resolved-type" />
-        <input type="hidden" id="add-resolved-brand" />
-
-        <!-- Lot Number to Register (Editable FIFO selector) -->
-        <div id="add-lot-field-group" style="display:none;">
-          <label>Lot Number ที่จะบันทึกเข้าพิกัดนี้ <small>(แก้ไขได้หากต้องการแยกกองตาม FIFO)</small></label>
-          <input type="text" id="add-final-lot" maxlength="7" inputmode="numeric" placeholder="7 หลัก" />
-
-          <!-- Coordinate Picker Grid (Identical to Relocate) -->
-          <div class="field-grid">
-            <div>
-              <label>เสา/แถว เริ่มต้น</label>
-              <div class="coord-picker-grid">
-                <select id="add-col-start"></select>
-                <select id="add-row-start"></select>
-              </div>
-            </div>
-            <div>
-              <label>เสา/แถว สิ้นสุด</label>
-              <div class="coord-picker-grid">
-                <select id="add-col-end"></select>
-                <select id="add-row-end"></select>
-              </div>
-            </div>
-          </div>
-
-          <label>ชั้นวาง (เลือกได้มากกว่า 1 ชั้น)</label>
-          <div class="level-btn-row" id="level-selector-add">
-            <button type="button" class="level-sq-btn active" data-lvl="1" onclick="toggleLevelBtn(this)">1</button>
-            <button type="button" class="level-sq-btn" data-lvl="2" onclick="toggleLevelBtn(this)">2</button>
-            <button type="button" class="level-sq-btn" data-lvl="3" onclick="toggleLevelBtn(this)">3</button>
-            <button type="button" class="level-sq-btn" data-lvl="4" onclick="toggleLevelBtn(this)">4</button>
-            <button type="button" class="level-sq-btn" data-lvl="5" onclick="toggleLevelBtn(this)">5</button>
-            <button type="button" class="level-sq-btn" data-lvl="6" onclick="toggleLevelBtn(this)">6</button>
-            <button type="button" class="level-sq-btn" data-lvl="7" onclick="toggleLevelBtn(this)">7</button>
-          </div>
-
-          <label>จำนวนที่จัดเก็บ</label>
-          <input type="number" id="add-qty" inputmode="numeric" pattern="[0-9]*" placeholder="0" />
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="closeNewLocationModal()">ยกเลิก</button>
-        <button class="btn btn-primary" id="btn-submit-add" onclick="submitNewLocation()" disabled>บันทึกพิกัดใหม่</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="api.js"></script>
-  <script src="app.js"></script>
 </body>
 </html>

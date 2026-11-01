@@ -5,30 +5,40 @@
 // ------------------------------------------
 // 1. SAMPLE DATA (TEMPORARY)
 // ------------------------------------------
+// Rows copied from sheet "DATA : Stock By Lot" (header is row 6).
+// Columns used: A Product Code, B Product Name, C Unit, D Lot No., I Remaining.
+// NOTE: product codes are TEXT with leading zeros ("000001"), never numbers.
 // TODO (backend step): replace these two blocks with real data.
-//   MOCK_PRODUCTS -> safeFetch('getProducts')  (sheet: DATA : Current Stock)
-//   MOCK_LOTS     -> safeFetch('getLots', { sku }) (sheet: DATA : Stock By Lot)
+//   MOCK_PRODUCTS -> safeFetch('getProducts')
+//   MOCK_LOTS     -> safeFetch('getLots', { sku })
 const MOCK_PRODUCTS = [
-  { code: '1001001', name: 'ยางนอก 700-16 ลายหนาม 14PR', unit: 'เส้น' },
-  { code: '1001002', name: 'ยางนอก 750-16 ลายหนาม 14PR', unit: 'เส้น' },
-  { code: '1001003', name: 'ยางนอก 825-16 ลายหนาม 16PR', unit: 'เส้น' },
-  { code: '1002001', name: 'ยางนอกเรเดียล 11R22.5 ลายบรรทุก', unit: 'เส้น' },
-  { code: '1002002', name: 'ยางนอกเรเดียล 295/80R22.5 ลายบรรทุก', unit: 'เส้น' },
-  { code: '1003001', name: 'ยางในธรรมชาติ 700-16', unit: 'เส้น' },
-  { code: '1003002', name: 'ยางในธรรมชาติ 825-16', unit: 'เส้น' },
-  { code: '1004001', name: 'ยางในบิวทิล 11R22.5', unit: 'เส้น' },
-  { code: '1005001', name: 'ยางรอง 700-16', unit: 'เส้น' },
-  { code: '1006001', name: 'กระทะล้อ 5.50F-16', unit: 'วง' },
-  { code: '1007001', name: 'ฮ.น้ำมันเกียร์ 85W-140 (18 ลิตร)', unit: 'ถัง' },
-  { code: '1008001', name: 'ฮ.จาระบีเอนกประสงค์ (15 กก.)', unit: 'ถัง' }
+  { code: '000001', name: 'แม่แรงตะเข้ 3.5 ตัน JOYACHI', unit: 'PC.' },
+  { code: '000210', name: 'ลูกบล็อก  1" IMPACT เบอร์ 21  FLAG Tools', unit: 'PC.' },
+  { code: '009030', name: 'PN55-420 Rust Proof Penetrating Oil ICHINEN 420ml', unit: 'กระป๋อง' },
+  { code: '400232', name: 'EP GREASE#1 (15KG)', unit: 'ถัง' },
+  { code: '401095', name: 'SUPER LONGLIFE COOLANT PREMIXED (4/4) (น้ำยารักษาหม้อน้ำแบบผสม 50:50)', unit: 'ลัง' },
+  { code: '401096', name: 'SUPER LONGLIFE COOLANT PREMIXED (10/1) (น้ำยารักษาหม้อน้ำแบบผสม 50:50', unit: 'ลัง' },
+  { code: '401250', name: 'AUTOMAT ATF 1A (10/1L)+2Bot', unit: 'ลัง' },
+  { code: '401256', name: 'AUTOMAT CVT  (10/1L)', unit: 'ลัง' }
 ];
 
+// lot = column D, qty = column I (Remaining), created = column E
 const MOCK_LOTS = {
-  '1001001': [{ lot: '2410069', qty: 120 }, { lot: '2606053', qty: 48 }],
-  '1001002': [{ lot: '2511002', qty: 60 }],
-  '1002001': [{ lot: '2602114', qty: 32 }, { lot: '2605120', qty: 16 }],
-  '1003001': [{ lot: '2601007', qty: 200 }]
+  '000001': [{ lot: '2410069', qty: 1, created: '29/10/2024' }],
+  '000210': [{ lot: '2200350', qty: 3, created: '05/04/2022' }],
+  '009030': [{ lot: '2101294', qty: 38, created: '18/10/2021' }],
+  '400232': [{ lot: '2100739', qty: 10, created: '12/05/2021' }],
+  '401095': [{ lot: '2400171', qty: 1, created: '17/02/2024' }],
+  '401096': [{ lot: '2400172', qty: 1, created: '17/02/2024' }],
+  '401250': [{ lot: '2200893', qty: 1, created: '12/09/2022' }],
+  '401256': [{ lot: '2101073', qty: 3, created: '24/08/2021' }]
 };
+
+// The office types ONLY the number; the prefix is added automatically.
+// If your real ORD format differs (no dash, different prefix) change these two lines.
+const ORD_PREFIX = 'ORD';
+const ORD_SEPARATOR = '-';
+const buildOrd = (digits) => `${ORD_PREFIX}${ORD_SEPARATOR}${digits}`;
 
 // TODO (login step): replace with the email from Google sign-in.
 const currentUserEmail = 'staff@aes.co.th';
@@ -126,7 +136,7 @@ function blockHTML(block, index) {
         </div>
 
         <datalist id="lots-${block.id}">
-          ${lotSuggestions.map(s => `<option value="${esc(s.lot)}">คงเหลือ ${esc(s.qty)} ${esc(p.unit)}</option>`).join('')}
+          ${lotSuggestions.map(s => `<option value="${esc(s.lot)}">คงเหลือ ${esc(s.qty)} ${esc(p.unit)} · ${esc(s.created)}</option>`).join('')}
         </datalist>
 
         <button type="button" class="btn btn-outline btn-sm of-add-lot" data-act="add-lot" data-block="${block.id}">
@@ -230,9 +240,10 @@ function validateForm() {
   const rows = [];
   const seen = new Set();   // "productCode|lot" must be unique across the whole order
 
-  const ord = document.getElementById('ord-input').value.trim();
-  ordErr = !ord;
-  if (ordErr) errors.push('กรุณากรอกเลข ORD');
+  const ordDigits = document.getElementById('ord-input').value.trim();
+  const ord = ordDigits ? buildOrd(ordDigits) : '';
+  ordErr = !ordDigits;
+  if (ordErr) errors.push('กรุณากรอกเลข ORD (ตัวเลขเท่านั้น)');
 
   blocks.forEach((b, i) => {
     b.err = !b.product;
@@ -410,6 +421,7 @@ function wireEvents() {
   });
 
   document.getElementById('ord-input').addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/\D/g, '');   // digits only
     ordErr = false;
     e.target.classList.remove('invalid');
   });
@@ -420,6 +432,7 @@ function wireEvents() {
 // ------------------------------------------
 window.onload = () => {
   document.getElementById('sidebar-user').textContent = currentUserEmail;
+  document.getElementById('ord-prefix').textContent = ORD_PREFIX + ORD_SEPARATOR;
   blocks = [newBlock()];
   render();
   wireEvents();

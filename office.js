@@ -19,7 +19,8 @@ const MOCK_PRODUCTS = [
   { code: '401095', name: 'SUPER LONGLIFE COOLANT PREMIXED (4/4) (น้ำยารักษาหม้อน้ำแบบผสม 50:50)', unit: 'ลัง' },
   { code: '401096', name: 'SUPER LONGLIFE COOLANT PREMIXED (10/1) (น้ำยารักษาหม้อน้ำแบบผสม 50:50', unit: 'ลัง' },
   { code: '401250', name: 'AUTOMAT ATF 1A (10/1L)+2Bot', unit: 'ลัง' },
-  { code: '401256', name: 'AUTOMAT CVT  (10/1L)', unit: 'ลัง' }
+  { code: '401256', name: 'AUTOMAT CVT  (10/1L)', unit: 'ลัง' },
+  { code: 'MI15P-0022', name: 'กระทะล้อ 7.0J X 15 P (6H) ET-15 EL/ GIANT VHD สีเงิน (133)', unit: 'วง' }
 ];
 
 // lot = column D, qty = column I (Remaining), created = column E
@@ -31,13 +32,22 @@ const MOCK_LOTS = {
   '401095': [{ lot: '2400171', qty: 1, created: '17/02/2024' }],
   '401096': [{ lot: '2400172', qty: 1, created: '17/02/2024' }],
   '401250': [{ lot: '2200893', qty: 1, created: '12/09/2022' }],
-  '401256': [{ lot: '2101073', qty: 3, created: '24/08/2021' }]
+  '401256': [{ lot: '2101073', qty: 3, created: '24/08/2021' }],
+  // 27 real lots, 11 digits each, 1 wheel per lot (24110110015 ... 24110110041)
+  'MI15P-0022': Array.from({ length: 27 }, (_, i) => ({ lot: String(24110110015 + i), qty: 1, created: '07/11/2024' }))
 };
+
+// Valid lot lengths. Older lots are 7 digits, some lots since 2024 are 11 digits.
+// If another length appears, add it here and the whole form follows.
+const LOT_LENGTHS = [7, 11];
+const MAX_LOT_LEN = Math.max(...LOT_LENGTHS);
+const LOT_RULE_TEXT = LOT_LENGTHS.join(' หรือ ') + ' หลัก';
+const isValidLot = (v) => /^\d+$/.test(v) && LOT_LENGTHS.includes(v.length);
 
 // The office types ONLY the number; the prefix is added automatically.
 // If your real ORD format differs (no dash, different prefix) change these two lines.
 const ORD_PREFIX = 'ORD';
-const ORD_SEPARATOR = '-';
+const ORD_SEPARATOR = '';
 const buildOrd = (digits) => `${ORD_PREFIX}${ORD_SEPARATOR}${digits}`;
 
 // TODO (login step): replace with the email from Google sign-in.
@@ -53,7 +63,17 @@ let ordErr = false;
 
 const nextId = () => ++uid;
 const newLot = () => ({ id: nextId(), lot: '', qty: '', errLot: false, errQty: false });
-const newBlock = () => ({ id: nextId(), product: null, lots: [newLot()], err: false });
+const newBlock = () => ({ id: nextId(), product: null, lots: [newLot()], err: false, pickOpen: false, oldestN: '' });
+
+// dd/mm/yyyy -> yyyymmdd (sortable number)
+const dateKey = (d) => { const m = String(d || '').split('/'); return m.length === 3 ? Number(m[2] + m[1].padStart(2, '0') + m[0].padStart(2, '0')) : 0; };
+// Lots that exist in stock for a product, oldest first (FIFO)
+const availableLots = (code) => (MOCK_LOTS[code] || []).filter(l => l.qty > 0)
+  .slice().sort((a, b) => dateKey(a.created) - dateKey(b.created) || a.lot.localeCompare(b.lot));
+// Only products that still have stock can be ordered
+const stockedProducts = () => MOCK_PRODUCTS.filter(p => availableLots(p.code).length > 0);
+const isBlankLotRow = (l) => !l.lot && !l.qty;
+const ensureOneLot = (block) => { if (!block.lots.length) block.lots.push(newLot()); };
 
 // ------------------------------------------
 // 3. SMALL HELPERS
@@ -92,7 +112,7 @@ function lotRowHTML(block, lot) {
       <input type="text" class="of-input ${lot.errLot ? 'invalid' : ''}"
              data-field="lot" data-block="${block.id}" data-lot="${lot.id}"
              list="lots-${block.id}" value="${esc(lot.lot)}"
-             inputmode="numeric" maxlength="7" placeholder="Lot 7 หลัก" autocomplete="off" />
+             inputmode="numeric" maxlength="${MAX_LOT_LEN}" placeholder="Lot ${LOT_RULE_TEXT}" autocomplete="off" />
       <input type="text" class="of-input ${lot.errQty ? 'invalid' : ''}"
              data-field="qty" data-block="${block.id}" data-lot="${lot.id}"
              value="${esc(lot.qty)}" inputmode="numeric" placeholder="จำนวน${unit ? ' (' + esc(unit) + ')' : ''}" autocomplete="off" />
@@ -101,6 +121,40 @@ function lotRowHTML(block, lot) {
               aria-label="ลบ Lot นี้" ${block.lots.length <= 1 ? 'disabled' : ''}>${icon('minus')}</button>
     </div>
   `;
+}
+
+function lotPickerHTML(block) {
+  const p = block.product;
+  const avail = p ? availableLots(p.code) : [];
+  if (!p || !avail.length) return '';
+  const chosen = new Set(block.lots.map(l => l.lot));
+  const chosenCount = avail.filter(a => chosen.has(a.lot)).length;
+
+  const toggleBtn = `
+    <button type="button" class="btn btn-outline btn-sm of-pick-toggle" data-act="toggle-pick" data-block="${block.id}">
+      <span>${block.pickOpen ? 'ซ่อนรายการ Lot' : 'เลือก Lot จากรายการ'} (${chosenCount}/${avail.length})</span>
+    </button>`;
+  if (!block.pickOpen) return toggleBtn;
+
+  return `
+    ${toggleBtn}
+    <div class="of-lotpick">
+      <div class="of-lotpick-tools">
+        <span>เลือก Lot เก่าสุด</span>
+        <input type="text" class="of-input of-oldest-n" data-field="oldest-n" data-block="${block.id}"
+               value="${esc(block.oldestN)}" inputmode="numeric" placeholder="กี่รายการ" autocomplete="off" />
+        <button type="button" class="btn btn-primary btn-sm" data-act="pick-oldest" data-block="${block.id}">เลือก</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-act="clear-picked" data-block="${block.id}">ล้าง</button>
+      </div>
+      <div class="of-lotpick-list" data-list-block="${block.id}">
+        ${avail.map(a => `
+          <label class="of-lotpick-row">
+            <input type="checkbox" data-act="toggle-lot" data-block="${block.id}" data-pick-lot="${esc(a.lot)}" ${chosen.has(a.lot) ? 'checked' : ''} />
+            <span class="of-lp-lot">${esc(a.lot)}</span>
+            <span class="of-lp-meta">คงเหลือ ${esc(a.qty)} ${esc(p.unit)} · ${esc(a.created)}</span>
+          </label>`).join('')}
+      </div>
+    </div>`;
 }
 
 function blockHTML(block, index) {
@@ -129,6 +183,8 @@ function blockHTML(block, index) {
           <span class="chip" style="color:var(--accent-blue)">${esc(p ? p.code : '')}</span>
           <span>${esc(p ? p.name : '')}</span>
         </div>
+
+        ${lotPickerHTML(block)}
 
         <div class="of-lot-head"><span>Lot Number</span><span>จำนวนที่สั่ง</span><span></span></div>
         <div class="of-lots">
@@ -169,7 +225,7 @@ function showComboList(inputEl) {
   // If a product is already chosen, tapping the box shows the whole list again
   const showingChosen = block && block.product && inputEl.value === productLabel(block.product);
   const q = showingChosen ? '' : inputEl.value.trim().toLowerCase();
-  const matches = MOCK_PRODUCTS.filter(p =>
+  const matches = stockedProducts().filter(p =>
     !q || p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
   ).slice(0, 30);
 
@@ -232,11 +288,67 @@ function removeLot(blockId, lotId) {
   render();
 }
 
+// Re-render but keep the lot list scroll position (so ticking boxes doesn't jump)
+function renderKeepScroll(blockId) {
+  const sel = `[data-list-block="${blockId}"]`;
+  const before = document.querySelector(sel);
+  const top = before ? before.scrollTop : 0;
+  render();
+  const after = document.querySelector(sel);
+  if (after) after.scrollTop = top;
+}
+
+function togglePick(blockId) {
+  const block = findBlock(blockId);
+  if (!block) return;
+  block.pickOpen = !block.pickOpen;
+  render();
+}
+
+// Tick / untick one lot. Quantity defaults to what is left in stock (editable).
+function toggleLot(blockId, lotNo, checked) {
+  const block = findBlock(blockId);
+  if (!block || !block.product) return;
+  if (checked) {
+    const info = availableLots(block.product.code).find(a => a.lot === lotNo);
+    if (!info || block.lots.some(l => l.lot === lotNo)) return;
+    block.lots = block.lots.filter(l => !isBlankLotRow(l));
+    block.lots.push({ id: nextId(), lot: lotNo, qty: String(info.qty), errLot: false, errQty: false });
+  } else {
+    block.lots = block.lots.filter(l => l.lot !== lotNo);
+    ensureOneLot(block);
+  }
+  renderKeepScroll(blockId);
+}
+
+// Replace the selection with the N oldest lots (FIFO)
+function pickOldest(blockId) {
+  const block = findBlock(blockId);
+  if (!block || !block.product) return;
+  const n = parseInt(block.oldestN, 10);
+  if (!n || n <= 0) {
+    Swal.fire({ icon: 'warning', title: 'ใส่จำนวนรายการ', text: 'กรอกว่าต้องการ Lot เก่าสุดกี่รายการ', confirmButtonText: 'ตกลง', ...swalTheme() });
+    return;
+  }
+  block.lots = availableLots(block.product.code).slice(0, n)
+    .map(a => ({ id: nextId(), lot: a.lot, qty: String(a.qty), errLot: false, errQty: false }));
+  ensureOneLot(block);
+  renderKeepScroll(blockId);
+}
+
+function clearPicked(blockId) {
+  const block = findBlock(blockId);
+  if (!block) return;
+  block.lots = [newLot()];
+  renderKeepScroll(blockId);
+}
+
 // ------------------------------------------
 // 7. VALIDATE + SAVE
 // ------------------------------------------
 function validateForm() {
   const errors = [];
+  const warnings = [];
   const rows = [];
   const seen = new Set();   // "productCode|lot" must be unique across the whole order
 
@@ -253,11 +365,11 @@ function validateForm() {
       l.errLot = false; l.errQty = false;
       if (!b.product) return;
 
-      const lotOk = /^\d{7}$/.test(l.lot);
+      const lotOk = isValidLot(l.lot);
       const qtyNum = Number(l.qty);
       const qtyOk = Number.isInteger(qtyNum) && qtyNum > 0;
 
-      if (!lotOk) { l.errLot = true; errors.push(`สินค้า ${i + 1} · Lot ${j + 1}: Lot ต้องเป็นตัวเลข 7 หลัก`); }
+      if (!lotOk) { l.errLot = true; errors.push(`สินค้า ${i + 1} · Lot ${j + 1}: Lot ต้องเป็นตัวเลข ${LOT_RULE_TEXT}`); }
       if (!qtyOk) { l.errQty = true; errors.push(`สินค้า ${i + 1} · Lot ${j + 1}: จำนวนต้องมากกว่า 0`); }
 
       if (lotOk) {
@@ -266,13 +378,23 @@ function validateForm() {
         seen.add(key);
       }
 
+      // Soft warnings (do not block saving)
+      if (lotOk && qtyOk) {
+        const known = availableLots(b.product.code);
+        if (known.length) {
+          const info = known.find(a => a.lot === l.lot);
+          if (!info) warnings.push(`Lot ${l.lot} (${b.product.code}) ไม่พบในระบบสำหรับสินค้านี้`);
+          else if (qtyNum > info.qty) warnings.push(`Lot ${l.lot}: สั่ง ${qtyNum} แต่คงเหลือ ${info.qty}`);
+        }
+      }
+
       if (lotOk && qtyOk) {
         rows.push({ ord, productCode: b.product.code, productName: b.product.name, unit: b.product.unit, lot: l.lot, qty: qtyNum });
       }
     });
   });
 
-  return { ord, errors, rows };
+  return { ord, errors, warnings, rows };
 }
 
 function formatNow() {
@@ -282,7 +404,7 @@ function formatNow() {
 }
 
 async function saveOrder() {
-  const { errors, rows } = validateForm();
+  const { errors, warnings, rows } = validateForm();
   render();   // show red borders
 
   if (errors.length) {
@@ -313,6 +435,7 @@ async function saveOrder() {
         <div><strong>ORD:</strong> ${esc(rows[0].ord)}</div>
         <div><strong>เวลา:</strong> ${esc(stamp)}</div>
         <div><strong>ผู้บันทึก:</strong> ${esc(currentUserEmail)}</div>
+        ${warnings.length ? `<div style="margin:8px 0; padding:8px 10px; border-radius:8px; font-size:14px; background:rgba(210,153,34,.14); color:#d29922;">⚠ ตรวจสอบอีกครั้ง:<br>${warnings.slice(0, 5).map(w => esc(w)).join('<br>')}${warnings.length > 5 ? `<br>… และอีก ${warnings.length - 5} รายการ` : ''}</div>` : ''}
         <table style="width:100%; margin-top:8px; border-collapse:collapse; font-size:14px;">
           <tr style="opacity:.7;"><td style="padding:4px 8px;">รหัสสินค้า</td><td style="padding:4px 8px;">Lot</td><td style="padding:4px 8px; text-align:right;">จำนวน</td></tr>
           ${preview}
@@ -377,11 +500,17 @@ function wireEvents() {
       return;
     }
 
+    if (field === 'oldest-n') {
+      el.value = el.value.replace(/\D/g, '');
+      block.oldestN = el.value;
+      return;
+    }
+
     const lot = block.lots.find(l => l.id === Number(el.dataset.lot));
     if (!lot) return;
 
     if (field === 'lot') {
-      el.value = el.value.replace(/\D/g, '').slice(0, 7);
+      el.value = el.value.replace(/\D/g, '').slice(0, MAX_LOT_LEN);
       lot.lot = el.value; lot.errLot = false;
     } else if (field === 'qty') {
       el.value = el.value.replace(/\D/g, '');
@@ -413,6 +542,10 @@ function wireEvents() {
     else if (act === 'remove-block') removeBlock(btn.dataset.block);
     else if (act === 'add-lot') addLot(btn.dataset.block);
     else if (act === 'remove-lot') removeLot(btn.dataset.block, btn.dataset.lot);
+    else if (act === 'toggle-pick') togglePick(btn.dataset.block);
+    else if (act === 'pick-oldest') pickOldest(btn.dataset.block);
+    else if (act === 'clear-picked') clearPicked(btn.dataset.block);
+    else if (act === 'toggle-lot') toggleLot(btn.dataset.block, btn.dataset.pickLot, btn.checked);
   });
 
   // clicking anywhere else closes the product list

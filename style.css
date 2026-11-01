@@ -1414,3 +1414,233 @@ h1, h2, h3 {
     height: 58px;
   }
 }
+
+/* ==========================================
+   OFFICE ORDER FORM (office.html)
+   ========================================== */
+.of-wrap {
+  padding-top: 16px;
+}
+
+.of-test-banner {
+  font-size: 14px;
+  color: var(--accent-orange);
+  background: rgba(210, 153, 34, 0.12);
+  border: 1px solid rgba(210, 153, 34, 0.35);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.of-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.of-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.of-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 17px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.of-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.of-input.invalid {
+  border-color: var(--accent-red);
+}
+
+#product-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.of-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.of-block-err {
+  border-color: var(--accent-red);
+}
+
+.of-block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.of-block-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Searchable product dropdown */
+.of-combo {
+  position: relative;
+}
+
+.of-combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--accent-blue);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 60;
+}
+
+.of-combo-list[hidden] {
+  display: none;
+}
+
+.of-combo-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.of-combo-item:last-child {
+  border-bottom: none;
+}
+
+.of-combo-item:hover,
+.of-combo-item:active {
+  background: var(--bg-card-subtle);
+}
+
+.of-combo-code {
+  flex-shrink: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-blue);
+}
+
+.of-combo-name {
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.of-combo-empty {
+  padding: 14px 12px;
+  font-size: 15px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* After a product is chosen */
+.of-after {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.of-after[hidden] {
+  display: none;
+}
+
+.of-prod-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.of-lot-head,
+.of-lot-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.of-lot-head {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: -4px;
+}
+
+.of-lots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.of-lot-del {
+  width: 44px;
+  height: 48px;
+}
+
+.of-lot-del:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.of-add-lot {
+  align-self: flex-start;
+}
+
+.of-add-product {
+  min-height: 48px;
+}
+
+/* Sticky save bar */
+.of-savebar {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: var(--header-blur-bg);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.of-summary {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.of-save-btn {
+  min-height: 48px;
+  min-width: 150px;
+  font-size: 17px;
+  font-weight: 600;
+}

@@ -8,14 +8,101 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
-<body class="chooser-body">
-  <main class="chooser-wrap">
-    <h1 class="chooser-title">ทีมออฟฟิศโกดัง</h1>
-    <p class="chooser-sub">ฟอร์มสร้างใบสั่งหยิบ กำลังจะมาในขั้นตอนถัดไป</p>
-    <div style="text-align:center;">
-      <a class="btn btn-ghost" href="index.html" style="text-decoration:none;">กลับไปเลือกทีม</a>
+<body>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM12 12l8-4.5M12 12v9M12 12L4 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 7h12l-3-3M17 17H5l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 20c1-4 4.5-6 8-6s7 2 8 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </defs>
+  </svg>
+
+  <div id="scrim" onclick="closeSidebar()"></div>
+
+  <aside id="sidebar" aria-label="เมนูหลัก">
+    <div class="sb-head">
+      <div class="brand">
+        <span class="brand-mark"><svg class="ic"><use href="#i-cube"/></svg></span>
+        <div>
+          <div class="brand-name">AES Warehouse</div>
+          <div class="brand-sub">ทีมออฟฟิศโกดัง</div>
+        </div>
+      </div>
+      <button class="icon-btn sb-close" onclick="closeSidebar()" aria-label="ปิดเมนู"><svg class="ic"><use href="#i-close"/></svg></button>
     </div>
-  </main>
+    <div class="sb-scroll">
+      <div class="sb-label">เมนู</div>
+      <nav class="sb-nav">
+        <button class="nav-item active" onclick="closeSidebar()">
+          <svg class="ic"><use href="#i-list"/></svg><span>สร้างใบสั่งหยิบ</span>
+        </button>
+      </nav>
+      <div class="sb-label">ทีม</div>
+      <nav class="sb-nav">
+        <button class="nav-item" onclick="location.href='index.html'">
+          <svg class="ic"><use href="#i-swap"/></svg><span>เปลี่ยนทีม</span>
+        </button>
+      </nav>
+    </div>
+    <div class="sb-foot">
+      <div class="sb-user"><svg class="ic ic-sm"><use href="#i-user"/></svg><span id="sidebar-user">...</span></div>
+      <button class="icon-btn" onclick="toggleTheme()" title="สลับโหมดสว่าง/มืด"><svg class="ic"><use href="#i-theme"/></svg></button>
+    </div>
+  </aside>
+
+  <div id="main">
+    <header id="topbar">
+      <button class="icon-btn menu-btn" onclick="openSidebar()" aria-label="เปิดเมนู">
+        <svg class="ic"><use href="#i-menu"/></svg>
+      </button>
+      <h1 id="page-title">สร้างใบสั่งหยิบ</h1>
+    </header>
+
+    <div id="views">
+      <div id="view-order" class="app-view scroll-view">
+        <div class="page-wrap of-wrap">
+
+          <div class="of-test-banner">โหมดทดลอง: ยังไม่ได้เชื่อมต่อ Google Sheet ข้อมูลจะยังไม่ถูกส่งไปที่ OFFICE_LOG</div>
+
+          <!-- Order header -->
+          <div class="type-group-block">
+            <div class="type-group-header">
+              <div class="type-title-badge">ข้อมูลใบสั่ง</div>
+            </div>
+            <div class="of-field">
+              <label class="of-label" for="ord-input">เลข ORD</label>
+              <input type="text" id="ord-input" class="of-input" placeholder="เช่น ORD-2611001" autocomplete="off" autocapitalize="characters" />
+            </div>
+          </div>
+
+          <!-- Product blocks are rendered here by office.js -->
+          <div id="product-blocks"></div>
+
+          <button type="button" class="btn btn-outline btn-block of-add-product" data-act="add-block">
+            <svg class="ic"><use href="#i-plus"/></svg><span>เพิ่มสินค้า</span>
+          </button>
+
+          <!-- Sticky save bar -->
+          <div class="of-savebar">
+            <div class="of-summary" id="of-summary">0 สินค้า · 0 Lot</div>
+            <button type="button" class="btn btn-primary of-save-btn" onclick="saveOrder()">บันทึก (SAVE)</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="office.js"></script>
 </body>
 </html>

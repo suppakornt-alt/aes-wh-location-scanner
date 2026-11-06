@@ -15,8 +15,7 @@ async function safeFetch(action, payload = {}) {
       // We use text/plain to safely bypass strict browser preflight checks
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
-        apiKey: CONFIG.API_KEY,
-        action: action,
+        action,
         ...payload
       })
     });

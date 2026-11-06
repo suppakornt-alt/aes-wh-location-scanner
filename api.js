@@ -3,8 +3,6 @@
 const CONFIG = {
   // Your live deployment URL
   API_URL: "https://script.google.com/macros/s/AKfycbxu5KExFiT9S2Tb7GyrVDtDR6CX67g69Zmm5YQFDaBnIleBaTlbXndJ4dhOHlTp99ql/exec",
-  // The secret codeword matching Code.gs
-  API_KEY: "aes-scanner-prod-2026" 
 };
 
 /**

@@ -730,9 +730,8 @@ async function submitRelocate() {
 // ==========================================
 // 7. TRUEMONEY-STYLE ADD LOCATION MODAL
 // ==========================================
-let modalStream = null;
 let modalScanRunning = false;
-let modalTimerId = null;
+let modalScanner = null;
 
 function switchAddMode(mode) {
   document.getElementById('seg-btn-scan')?.classList.toggle('active', mode === 'scan');
@@ -843,42 +842,30 @@ async function startModalCamera() {
   const statusEl = document.getElementById('add-modal-scan-status');
 
   try {
-    modalStream = await openCamera();
-    modalVideo.srcObject = modalStream;
-    await modalVideo.play();
-    modalScanRunning = true;
-    if (toggleBtn) toggleBtn.textContent = 'ปิดกล้อง';
-    if (statusEl) statusEl.textContent = 'หันกล้องไปที่บาร์โค้ด Lot 7 หลัก...';
-
-    const r = new ZXing.MultiFormatReader();
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.QR_CODE]);
-    r.setHints(hints);
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-    const tick = () => {
-      if (!modalScanRunning) return;
-      if (modalVideo.videoWidth > 0) {
-        canvas.width = modalVideo.videoWidth;
-        canvas.height = modalVideo.videoHeight;
-        ctx.drawImage(modalVideo, 0, 0, canvas.width, canvas.height);
-        try {
-          const res = r.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(canvas))));
-          const code = res.getText().trim();
-          if (/^\d{7}$/.test(code)) {
-            if (statusEl) statusEl.textContent = `พบ Lot: ${code}`;
-            if (navigator.vibrate) navigator.vibrate(100);
-            stopModalCamera();
-            resolveLotForAdd(code);
-            return;
-          }
-        } catch (e) {}
+    modalScanner = BarcodeScanner({
+      video: modalVideo,
+      requiredMatches: 5,
+      pattern: /^\d{7}$/,
+      intervalMs: 120,
+      onStateChange: isRunning => {
+        modalScanRunning = isRunning;
+        if (toggleBtn) toggleBtn.textContent = isRunning ? 'ปิดกล้อง' : 'เปิดกล้องสแกน';
+      },
+      onDetection: ({ code, count, required }) => {
+        if (statusEl) statusEl.textContent = `กำลังยืนยัน Lot ${code} (${count}/${required})`;
+      },
+      onConfirmed: ({ code }) => {
+        if (statusEl) statusEl.textContent = `พบ Lot: ${code}`;
+        if (navigator.vibrate) navigator.vibrate(100);
+        stopModalCamera();
+        resolveLotForAdd(code);
+      },
+      onError: () => {
+        if (statusEl) statusEl.textContent = 'เปิดกล้องไม่สำเร็จ';
       }
-      modalTimerId = setTimeout(tick, 120);
-    };
-    tick();
+    });
+    if (statusEl) statusEl.textContent = 'หันกล้องไปที่บาร์โค้ด Lot 7 หลัก...';
+    await modalScanner.start();
   } catch (err) {
     if (statusEl) statusEl.textContent = 'เปิดกล้องไม่สำเร็จ';
     stopModalCamera();
@@ -886,14 +873,9 @@ async function startModalCamera() {
 }
 
 function stopModalCamera() {
+  modalScanner?.stop();
+  modalScanner = null;
   modalScanRunning = false;
-  clearTimeout(modalTimerId);
-  if (modalStream) {
-    modalStream.getTracks().forEach(t => t.stop());
-    modalStream = null;
-  }
-  const modalVideo = document.getElementById('add-modal-video');
-  if (modalVideo) modalVideo.srcObject = null;
   const toggleBtn = document.getElementById('add-modal-camera-toggle');
   if (toggleBtn) toggleBtn.textContent = 'เปิดกล้องสแกน';
 }
@@ -990,31 +972,16 @@ const toggleBtn = document.getElementById('toggle-btn');
 const statusEl = document.getElementById('status');
 const resultLotEl = document.getElementById('result-lot');
 
-let stream = null, running = false, timerId = null, sampleBuffer = [];
-const REQUIRED_SAMPLES = 5, LOT_PATTERN = /^\d{7}$/;
+let running = false;
+let primaryScanner = null;
+const LOT_PATTERN = /^\d{7}$/;
 
 function processRawScan(code, format) {
-  const clean = code.trim();
-  if (!LOT_PATTERN.test(clean)) { 
-    if (statusEl) statusEl.textContent = 'ข้ามรหัสที่ผิดรูปแบบ (ต้อง 7 หลัก)'; 
-    return; 
-  }
-  sampleBuffer.push({ code: clean, format }); 
-  if (statusEl) statusEl.textContent = `กำลังยืนยัน... (${sampleBuffer.length}/${REQUIRED_SAMPLES})`;
-  
-  if (sampleBuffer.length >= REQUIRED_SAMPLES) {
-    const freq = {}; 
-    let max = 0, winner = sampleBuffer[0];
-    sampleBuffer.forEach(i => { 
-      freq[i.code] = (freq[i.code] || 0) + 1; 
-      if (freq[i.code] > max) { max = freq[i.code]; winner = i; }
-    });
-    onCodeConfirmed(winner.code, winner.format); 
-    sampleBuffer = [];
-  }
+  onCodeConfirmed(String(code).trim(), format);
 }
 
 function onCodeConfirmed(code, format) {
+  stopScanner();
   if (resultLotEl) resultLotEl.textContent = code;
   if (statusEl) statusEl.textContent = 'ยืนยันรหัสสำเร็จ!';
   if (navigator.vibrate) navigator.vibrate(100);
@@ -1056,79 +1023,35 @@ async function handleScannerLookup(lotCode) {
   }
 }
 
-async function openCamera() {
-  const attempts = [
-    { video: { facingMode: { ideal: 'environment' } }, audio: false }, 
-    { video: true, audio: false }
-  ];
-  let err; 
-  for (const c of attempts) { 
-    try { return await navigator.mediaDevices.getUserMedia(c); } 
-    catch (e) { err = e; } 
-  } 
-  throw err;
-}
-
 async function startScanner() {
+  stopScanner();
+  if (statusEl) statusEl.textContent = 'กำลังเปิดกล้อง...';
+  primaryScanner = BarcodeScanner({
+    video,
+    requiredMatches: 5,
+    pattern: LOT_PATTERN,
+    onStateChange: isRunning => {
+      running = isRunning;
+      if (toggleBtn) toggleBtn.textContent = isRunning ? 'ปิดกล้องสแกน' : 'เปิดกล้องสแกน';
+    },
+    onDetection: ({ count, required }) => {
+      if (statusEl) statusEl.textContent = `กำลังยืนยัน... (${count}/${required})`;
+    },
+    onConfirmed: ({ code, format }) => onCodeConfirmed(code, format),
+    onError: () => {
+      if (statusEl) statusEl.textContent = 'ไม่สามารถเข้าถึงกล้องได้';
+    }
+  });
   try {
-    stopScanner(); 
-    if (statusEl) statusEl.textContent = 'กำลังเปิดกล้อง...'; 
-    sampleBuffer = [];
-    stream = await openCamera(); 
-    if (video) {
-      video.srcObject = stream; 
-      await video.play();
-    }
-    running = true; 
-    if (toggleBtn) toggleBtn.textContent = 'ปิดกล้องสแกน'; 
+    await primaryScanner.start();
     if (statusEl) statusEl.textContent = 'หันกล้องไปที่บาร์โค้ด...';
-
-    if ('BarcodeDetector' in window) {
-      const det = new BarcodeDetector(); 
-      const tick = async () => { 
-        if (!running) return; 
-        try { 
-          const f = await det.detect(video); 
-          if (f.length) processRawScan(f[0].rawValue, f[0].format); 
-        } catch (e) {} 
-        timerId = setTimeout(tick, 80); 
-      }; 
-      tick();
-    } else {
-      const r = new ZXing.MultiFormatReader(), hints = new Map(); 
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.QR_CODE]); 
-      r.setHints(hints);
-      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const tick = () => { 
-        if (!running) return; 
-        if (video && video.videoWidth > 0) { 
-          canvas.width = video.videoWidth; 
-          canvas.height = video.videoHeight; 
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height); 
-          try { 
-            const res = r.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(canvas)))); 
-            processRawScan(res.getText(), ZXing.BarcodeFormat[res.getBarcodeFormat()]); 
-          } catch (e) {} 
-        } 
-        timerId = setTimeout(tick, 100); 
-      }; 
-      tick();
-    }
-  } catch (err) { 
-    if (statusEl) statusEl.textContent = 'ไม่สามารถเข้าถึงกล้องได้'; 
-    stopScanner(); 
-  }
+  } catch (_) {}
 }
 
 function stopScanner() {
-  running = false; 
-  clearTimeout(timerId); 
-  sampleBuffer = [];
-  if (stream) { 
-    stream.getTracks().forEach(t => t.stop()); 
-    stream = null; 
-  }
-  if (video) video.srcObject = null; 
+  primaryScanner?.stop();
+  primaryScanner = null;
+  running = false;
   if (toggleBtn) toggleBtn.textContent = 'เปิดกล้องสแกน';
 }
 

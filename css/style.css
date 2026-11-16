@@ -662,6 +662,21 @@ h1, h2, h3 {
   padding-top: 20px;
 }
 
+.scanner-mode-switch {
+  width: 100%;
+  max-width: 480px;
+  box-sizing: border-box;
+}
+
+.scanner-camera-toggle {
+  display: block;
+  min-width: 220px;
+  min-height: 48px;
+  margin: 0 auto 10px;
+  padding: 10px 24px;
+  font-size: 1.05rem;
+}
+
 .scan-warning-msg {
   color: var(--accent-red);
   margin-bottom: 10px;
@@ -674,6 +689,7 @@ h1, h2, h3 {
   font-size: 1.0rem;
   margin-bottom: 15px;
   min-height: 20px;
+  text-align: center;
 }
 
 .scanner-container {

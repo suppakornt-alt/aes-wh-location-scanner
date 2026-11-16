@@ -51,6 +51,16 @@ function verifyGoogleIdToken(idToken) {
   }
 }
 
+// Run this once from the Apps Script editor after deployment to authorize
+// UrlFetchApp for Google ID-token verification. It is not exposed by doPost.
+function authorizeGoogleTokenVerification() {
+  const response = UrlFetchApp.fetch(
+    'https://oauth2.googleapis.com/tokeninfo?id_token=invalid',
+    { muteHttpExceptions: true }
+  );
+  return `Google token endpoint responded with HTTP ${response.getResponseCode()}`;
+}
+
 function isAllowedUser(email) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   const normalizedDomain = CONFIG.ALLOWED_EMAIL_DOMAIN.toLowerCase();

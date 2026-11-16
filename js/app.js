@@ -1,38 +1,11 @@
 // ==========================================
 // 1. GLOBAL STATE & CONFIGURATION
 // ==========================================
-let scene, camera, renderer, controls, gridHelper, floorMesh;
-const items = [];
 let masterStaffItems = [], masterAuditItems = [], masterCatalog = [];
-let currentTheme = 'dark', currentView = 'scanner';
-let activeTypeFilter = null, activeCriteriaFilter = null, isHeatmapMode = false;
-let currentUserEmail = 'staff@aes.co.th';
-
-const TILE_SIZE = 1.0, LEVEL_HEIGHT = 0.85, GAP = 0.1, DESKTOP_MIN = 900;
-const VIEW_TITLES = { 
-  'scanner': 'สแกนเนอร์บาร์โค้ด', 
-  '3d': 'แผนผังคลัง 3D', 
-  'ops': 'จัดการหยิบ / เติม / ย้าย', 
-  'audit': 'ตรวจสอบยอด ERP' 
-};
-
-const CATEGORY_COLORS = { 
-  "กระทะ": { hex: 0x2f81f7, css: "#2f81f7" }, 
-  "ยางนอก": { hex: 0x238636, css: "#238636" }, 
-  "ยางนอกเรเดียล": { hex: 0x238636, css: "#238636" }, 
-  "ยางในธรรมชาติ": { hex: 0xe3b341, css: "#e3b341" }, 
-  "ยางในบิวทิล": { hex: 0xd29922, css: "#d29922" }, 
-  "ยางรอง": { hex: 0xa371f7, css: "#a371f7" }, 
-  "ฮ.น้ำมัน": { hex: 0xda3633, css: "#da3633" }, 
-  "ฮ.เบ็ดเตล็ด": { hex: 0xdb61a2, css: "#db61a2" } 
-};
-const DEFAULT_COLOR = { hex: 0x8b949e, css: "#8b949e" };
-const CRITERIA_COLORS = { 
-  "FAST": { hex: 0x238636, css: "#238636", label: "FAST · ขายเร็ว" }, 
-  "MEDIUM": { hex: 0xe3b341, css: "#e3b341", label: "MEDIUM · ปานกลาง" }, 
-  "SLOW": { hex: 0xf0883e, css: "#f0883e", label: "SLOW · เริ่มช้า" }, 
-  "DEAD": { hex: 0xda3633, css: "#da3633", label: "DEAD · สต็อกนิ่ง" } 
-};
+let currentTheme = APP_CONFIG.defaultTheme, currentView = 'scanner';
+const currentUserEmail = APP_CONFIG.currentUserEmail;
+const { tileSize: TILE_SIZE, levelHeight: LEVEL_HEIGHT, gap: GAP } = WAREHOUSE_CONFIG;
+const DESKTOP_MIN = APP_CONFIG.desktopMinWidth;
 
 // ==========================================
 // 2. UTILITY & HELPER FUNCTIONS
@@ -60,10 +33,7 @@ function toggleAccordion(contentId, arrowId) {
 function toggleTheme() {
   currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', currentTheme);
-  if (scene) { 
-    scene.background.setHex(currentTheme === 'dark' ? 0x0d1117 : 0xf4f6f8); 
-    updateGridAndFloor(); 
-  }
+  Warehouse3D.setTheme(currentTheme);
 }
 
 async function switchView(viewName) {
@@ -84,250 +54,24 @@ async function switchView(viewName) {
 // ==========================================
 // 3. 3D VISUALIZATION ENGINE (THREE.JS)
 // ==========================================
-function getCategoryColor(type) { 
-  const t = String(type).trim(); 
-  return CATEGORY_COLORS[t] ? CATEGORY_COLORS[t].hex : DEFAULT_COLOR.hex; 
-}
-function getCriteriaColor(crit) { 
-  const key = String(crit || 'FAST').trim().toUpperCase(); 
-  return CRITERIA_COLORS[key] ? CRITERIA_COLORS[key].hex : CRITERIA_COLORS["FAST"].hex; 
-}
-
-function toggleHeatmapMode() {
-  isHeatmapMode = !isHeatmapMode;
-  document.getElementById('heatmap-toggle-btn').classList.toggle('active', isHeatmapMode);
-  document.getElementById('heatmap-label').innerText = isHeatmapMode ? 'ปิด Heatmap' : 'เปิด Heatmap';
-  applyCurrentColoring();
-  closeSidebarIfMobile();
-}
-
-function applyCurrentColoring() {
-  items.forEach(box => {
-    box.material.color.setHex(isHeatmapMode ? getCriteriaColor(box.userData.criteria) : box.userData.originalColor);
-    box.material.opacity = 0.85; 
-    box.userData.edgeLine.material.opacity = 0.8;
-  });
-}
-
-function dimOrHighlight(box, match) {
-  if (match) {
-    box.material.color.setHex(isHeatmapMode ? getCriteriaColor(box.userData.criteria) : box.userData.originalColor);
-    box.material.opacity = 1.0; 
-    box.userData.edgeLine.material.opacity = 1.0;
-  } else {
-    box.material.color.setHex(0x333333); 
-    box.material.opacity = 0.15; 
-    box.userData.edgeLine.material.opacity = 0.05;
-  }
-}
-
-function filterByCriteria(key) { 
-  activeCriteriaFilter = activeCriteriaFilter === key ? null : key; 
-  activeTypeFilter = null; 
-  items.forEach(box => dimOrHighlight(box, !activeCriteriaFilter || String(box.userData.criteria).toUpperCase() === activeCriteriaFilter)); 
-  closeSidebarIfMobile(); 
-}
-
-function filterByType(type) { 
-  activeTypeFilter = activeTypeFilter === type ? null : type; 
-  activeCriteriaFilter = null; 
-  items.forEach(box => { 
-    const t = String(box.userData.type).trim(); 
-    dimOrHighlight(box, !activeTypeFilter || (type === 'อื่นๆ' ? !CATEGORY_COLORS[t] : t === type)); 
-  }); 
-  closeSidebarIfMobile(); 
-}
-
-function renderLegend() {
-  const container = document.getElementById('legend-list'); 
-  if (!container) return;
-  container.innerHTML = '';
-  const add = (label, css, fn) => { 
-    const el = document.createElement('div'); 
-    el.className = 'legend-item'; 
-    el.onclick = fn; 
-    el.innerHTML = `<span class="legend-dot" style="background-color:${css};"></span><span class="legend-name">${esc(label)}</span>`; 
-    container.appendChild(el); 
-  };
-  Object.keys(CATEGORY_COLORS).forEach(t => add(t, CATEGORY_COLORS[t].css, () => filterByType(t)));
-  add('อื่นๆ', DEFAULT_COLOR.css, () => filterByType('อื่นๆ'));
-}
-
-function updateVelocitySummary(sheetData) {
-  const skuMap = {}; 
-  sheetData.forEach(i => { 
-    const sku = String(i.sku).trim(); 
-    if (sku && !skuMap[sku]) skuMap[sku] = String(i.criteria || 'FAST').trim().toUpperCase(); 
-  });
-  const total = Object.keys(skuMap).length;
-  if (!total) return;
-  const counts = { FAST: 0, MEDIUM: 0, SLOW: 0, DEAD: 0 };
-  Object.values(skuMap).forEach(c => { if (c in counts) counts[c]++; });
-  Object.keys(counts).forEach(k => {
-    const pct = Math.round((counts[k] / total) * 100), low = k.toLowerCase();
-    const pctEl = document.getElementById(`pct-${low}`);
-    const barEl = document.getElementById(`bar-${low}`);
-    if (pctEl) pctEl.innerText = `${pct}%`;
-    if (barEl) barEl.style.width = `${pct}%`;
-  });
-  const totalLabel = document.getElementById('velocity-total-sku-label');
-  if (totalLabel) totalLabel.innerText = `คำนวณจาก ${total} SKUs ที่มีตำแหน่ง`;
-}
-
-function initThree() {
-  const container = document.getElementById('canvas-container');
-  if (!container) return;
-  scene = new THREE.Scene(); 
-  scene.background = new THREE.Color(currentTheme === 'dark' ? 0x0d1117 : 0xf4f6f8);
-  camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 500); 
-  camera.position.set(30, 35, 45);
-  
-  renderer = new THREE.WebGLRenderer({ antialias: true }); 
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); 
-  renderer.setSize(container.clientWidth, container.clientHeight); 
-  container.appendChild(renderer.domElement);
-  
-  controls = new THREE.OrbitControls(camera, renderer.domElement); 
-  controls.target.set(30, 0, 10); 
-  controls.enableDamping = true; 
-  controls.dampingFactor = 0.08;
-  
-  updateGridAndFloor();
-  scene.add(new THREE.AmbientLight(0xffffff, 0.85)); 
-  const dl = new THREE.DirectionalLight(0xffffff, 0.55); 
-  dl.position.set(30, 40, 20); 
-  scene.add(dl);
-  
-  setupInteractions(); 
-  animate(); 
-  renderLegend();
-  if (window.ResizeObserver) new ResizeObserver(resizeRenderer).observe(container); 
-  else window.addEventListener('resize', resizeRenderer);
-}
-
-function resizeRenderer() {
-  const container = document.getElementById('canvas-container');
-  if (!renderer || !container || !container.clientWidth) return;
-  camera.aspect = container.clientWidth / container.clientHeight; 
-  camera.updateProjectionMatrix(); 
-  renderer.setSize(container.clientWidth, container.clientHeight);
-}
-
-function updateGridAndFloor() {
-  if (gridHelper) scene.remove(gridHelper); 
-  if (floorMesh) scene.remove(floorMesh);
-  const isDark = currentTheme === 'dark';
-  gridHelper = new THREE.GridHelper(60, 60, isDark ? 0x58a6ff : 0x1a6fe0, isDark ? 0x30363d : 0xdde1e6); 
-  gridHelper.position.set(30, 0, 10); 
-  gridHelper.scale.set(1, 1, 20 / 60); 
-  scene.add(gridHelper);
-  
-  floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(60, 20), new THREE.MeshBasicMaterial({ color: isDark ? 0x161b22 : 0xeceff2, side: THREE.DoubleSide })); 
-  floorMesh.rotation.x = Math.PI / 2; 
-  floorMesh.position.set(30, -0.01, 10); 
-  scene.add(floorMesh);
-}
-
-function renderWarehouse(sheetData) {
-  const loader = document.getElementById('loader');
-  if (loader) loader.style.display = 'none';
-  items.forEach(box => scene.remove(box)); 
-  items.length = 0;
-  if (!sheetData || !sheetData.length) return;
-
-  sheetData.forEach(item => {
-    const w = (Math.abs(item.colEnd - item.colStart) + 1) * TILE_SIZE - GAP;
-    const h = (Math.abs(item.maxLvl - item.minLvl) + 1) * LEVEL_HEIGHT;
-    const d = (Math.abs(item.rowEnd - item.rowStart) + 1) * TILE_SIZE - GAP;
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const orig = getCategoryColor(item.type);
-    const box = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ 
-      color: isHeatmapMode ? getCriteriaColor(item.criteria) : orig, 
-      roughness: 0.35, 
-      transparent: true, 
-      opacity: 0.85 
-    }));
-    box.position.set(
-      ((item.colStart + item.colEnd) / 2) - 0.5, 
-      (item.minLvl - 1) * LEVEL_HEIGHT + (h / 2), 
-      ((item.rowStart + item.rowEnd) / 2) - 0.5
-    );
-    const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 })); 
-    box.add(line);
-    box.userData = { ...item, originalColor: orig, edgeLine: line };
-    scene.add(box); 
-    items.push(box);
-  });
-  updateVelocitySummary(sheetData);
-}
-
-function showDetail(d) {
-  const card = document.getElementById('detail-card');
-  if (!card) return;
-  card.innerHTML = `
-    <div class="dc-head">
-      <div class="dc-title">${esc(d.name)}</div>
-      <button class="icon-btn" onclick="hideDetail()">${icon('close')}</button>
-    </div>
-    <div class="dc-grid">
-      <span>SKU</span><span>${esc(d.sku)}</span>
-      <span>ประเภท</span><span>${esc(d.type)}</span>
-      <span>จำนวน</span><span>${esc(d.qty)} ${esc(d.unit || 'เส้น')}</span>
-      <span>พิกัด</span><span>${esc(d.displayLoc)}</span>
-    </div>
-  `;
-  card.style.display = 'block';
-}
-
-function hideDetail() { 
-  const c = document.getElementById('detail-card'); 
-  if (c) c.style.display = 'none'; 
-}
-
-function setupInteractions() {
-  const rc = new THREE.Raycaster(), mouse = new THREE.Vector2(), dom = renderer.domElement; 
-  let downPos = null;
-  const hitAt = (e) => { 
-    const rect = dom.getBoundingClientRect(); 
-    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1; 
-    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1; 
-    rc.setFromCamera(mouse, camera); 
-    const hits = rc.intersectObjects(items); 
-    return hits.length ? hits[0].object.userData : null; 
-  };
-  dom.addEventListener('pointerdown', e => downPos = { x: e.clientX, y: e.clientY });
-  dom.addEventListener('pointerup', e => { 
-    if (!downPos || Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 6) return; 
-    const d = hitAt(e); 
-    d ? showDetail(d) : hideDetail(); 
-  });
-}
-
-function animate() { 
-  requestAnimationFrame(animate); 
-  if (controls) controls.update(); 
-  if (renderer && scene && camera) renderer.render(scene, camera); 
-}
-
+// ==========================================
+// 4. THREE.JS MODULE ADAPTERS
+// app.js keeps these small wrappers so existing HTML handlers continue to work.
+// ==========================================
+function toggleHeatmapMode() { Warehouse3D.toggleHeatmapMode(); }
+function filterByCriteria(key) { Warehouse3D.filterByCriteria(key); }
+function filterByType(type) { Warehouse3D.filterByType(type); }
+function initThree() { Warehouse3D.init(currentTheme); }
+function resizeRenderer() { Warehouse3D.resize(); }
+function renderWarehouse(sheetData) { Warehouse3D.render(sheetData); }
+function hideDetail() { Warehouse3D.hideDetail(); }
 function searchSKU() {
-  const input = document.getElementById('search-input');
-  if (!input) return;
-  const query = input.value.trim().toUpperCase();
-  if (!query) { resetSearch(); return; }
-  items.forEach(box => {
-    const match = String(box.userData.sku).toUpperCase().includes(query) || String(box.userData.name).toUpperCase().includes(query);
-    dimOrHighlight(box, match);
-  });
+  Warehouse3D.search(document.getElementById('search-input')?.value || '');
 }
-
-function resetSearch() {
-  const input = document.getElementById('search-input');
-  if (input) input.value = '';
-  applyCurrentColoring();
-}
+function resetSearch() { Warehouse3D.resetSearch(); }
 
 // ==========================================
-// 4. COMMON UI BUILDERS & LIST RENDERERS
+// 5. COMMON UI BUILDERS & LIST RENDERERS
 // ==========================================
 function locRowHTML(loc, sku, unit) {
   const currentLot = loc.lotNo ? esc(loc.lotNo) : '';

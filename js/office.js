@@ -56,7 +56,7 @@ const currentUserEmail = 'staff@aes.co.th';
 // ------------------------------------------
 // 2. STATE
 // ------------------------------------------
-let currentTheme = 'dark';
+let currentTheme = 'light';
 let uid = 0;
 let blocks = [];   // [{ id, product, lots: [{ id, lot, qty, errLot, errQty }], err }]
 let ordErr = false;

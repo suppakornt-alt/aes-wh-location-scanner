@@ -686,6 +686,14 @@ h1, h2, h3 {
   text-align: center;
 }
 
+.google-auth-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
 .scan-status-msg {
   color: var(--text-muted);
   font-size: 1.0rem;

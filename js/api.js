@@ -9,9 +9,18 @@ const CONFIG = {
  * Sends a request to Google Apps Script.
  */
 async function safeFetch(action, payload = {}) {
+  const idToken = getGoogleIdToken();
+  if (!idToken) {
+    return {
+      success: false,
+      message: "Please sign in with Google first."
+    };
+  }
+
   const requestBody = {
     action,
-    ...payload
+    ...payload,
+    idToken
   };
 
   console.log("[API REQUEST]", requestBody);
@@ -19,7 +28,6 @@ async function safeFetch(action, payload = {}) {
   try {
     const response = await fetch(CONFIG.API_URL, {
       method: "POST",
-      credentials: "include",
       headers: {
         "Content-Type": "text/plain;charset=utf-8"
       },

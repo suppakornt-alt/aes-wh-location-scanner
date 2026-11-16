@@ -1,7 +1,8 @@
 const APP_CONFIG = {
   desktopMinWidth: 900,
   defaultTheme: 'light',
-  currentUserEmail: 'staff@aes.co.th'
+  currentUserEmail: 'staff@aes.co.th',
+  googleClientId: '457054725392-m4mrkfmceleivpg8a9f60oqgmg9ufeds.apps.googleusercontent.com'
 };
 
 const WAREHOUSE_CONFIG = {

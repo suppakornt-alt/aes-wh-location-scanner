@@ -6,6 +6,7 @@ const CONFIG = {
   STOCK_HEADER_ROW: 6,
   SHEET_LOT: 'DATA : Stock By Lot',
   LOT_HEADER_ROW: 6,
+  GOOGLE_CLIENT_ID: '457054725392-m4mrkfmceleivpg8a9f60oqgmg9ufeds.apps.googleusercontent.com',
   ALLOWED_EMAIL_DOMAIN: '@aesen.co.th',
   ALLOWED_EXCEPTION_EMAILS: [
     'fmygoal@gmail.com'
@@ -13,15 +14,41 @@ const CONFIG = {
 };
 
 function doGet() {
-  const userEmail = getCurrentUserEmail();
-  if (!isAllowedUser(userEmail)) {
-    return HtmlService.createHtmlOutput('Access denied. Please sign in with an authorized account.');
-  }
   return HtmlService.createHtmlOutput("AES Warehouse API Backend is running.");
 }
 
+let activeRequestUserEmail = null;
+
 function getCurrentUserEmail() {
-  return Session.getActiveUser().getEmail() || 'anonymous@mail';
+  return activeRequestUserEmail || Session.getActiveUser().getEmail() || 'anonymous@mail';
+}
+
+function verifyGoogleIdToken(idToken) {
+  if (!idToken) return '';
+
+  try {
+    const response = UrlFetchApp.fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+      { muteHttpExceptions: true }
+    );
+
+    if (response.getResponseCode() !== 200) return '';
+
+    const claims = JSON.parse(response.getContentText());
+    const issuer = String(claims.iss || '');
+    const email = String(claims.email || '').trim().toLowerCase();
+    const expiresAt = Number(claims.exp || 0);
+    const emailVerified = String(claims.email_verified).toLowerCase() === 'true';
+
+    const validIssuer = issuer === 'accounts.google.com' || issuer === 'https://accounts.google.com';
+    const validAudience = String(claims.aud || '') === CONFIG.GOOGLE_CLIENT_ID;
+    const notExpired = expiresAt > Math.floor(Date.now() / 1000);
+
+    return validIssuer && validAudience && emailVerified && notExpired ? email : '';
+  } catch (error) {
+    console.error(`Google ID token verification failed: ${error}`);
+    return '';
+  }
 }
 
 function isAllowedUser(email) {
@@ -778,12 +805,12 @@ function updateLocationLot(locId, newLot) {
 
 function doPost(e) {
   try {
-    const userEmail = getCurrentUserEmail();
+    const payload = JSON.parse(e.postData.contents);
+    const userEmail = verifyGoogleIdToken(payload.idToken);
     if (!isAllowedUser(userEmail)) {
       return accessDeniedResponse(userEmail);
     }
-
-    const payload = JSON.parse(e.postData.contents);
+    activeRequestUserEmail = userEmail;
 
     console.log('PAYLOAD RECEIVED:', JSON.stringify(payload));
 
@@ -851,6 +878,8 @@ function doPost(e) {
       success: false,
       message: err.toString()
     }, 500);
+  } finally {
+    activeRequestUserEmail = null;
   }
 }
 

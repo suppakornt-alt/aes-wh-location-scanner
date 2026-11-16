@@ -838,7 +838,12 @@ function stopScanner() {
 // ==========================================
 // 10. SYSTEM INITIALIZATION
 // ==========================================
+window.addEventListener('google-authenticated', () => {
+  loadData();
+});
+
 window.onload = () => {
+  initGoogleSignIn();
   initCoordDropdowns();
   initThree();
 
@@ -851,5 +856,5 @@ window.onload = () => {
     toggleBtn.addEventListener('click', () => (running ? stopScanner() : startScanner()));
   }
 
-  loadData();
+  if (getGoogleIdToken()) loadData();
 };

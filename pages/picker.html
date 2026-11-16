@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="../css/style.css">
   
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.0/umd/index.min.js"></script>
@@ -141,6 +142,10 @@
       <div id="view-scanner" class="app-view scroll-view">
         <div class="page-wrap scanner-landing-wrap">
           <div id="warn" class="scan-warning-msg"></div>
+          <div class="google-auth-panel">
+            <div id="google-signin-button"></div>
+            <div id="google-auth-status" class="mini-scan-status">ต้องลงชื่อเข้าใช้ก่อนใช้งาน</div>
+          </div>
           <div class="segmented-control scanner-mode-switch" role="tablist" aria-label="วิธีระบุ Lot">
             <button type="button" class="segment-btn active" id="primary-mode-scan" role="tab" aria-selected="true" onclick="switchPrimaryInputMode('scan')">
               <svg class="ic ic-sm"><use href="#i-camera"/></svg> สแกนบาร์โค้ด
@@ -418,6 +423,7 @@
 
   <script src="../js/api.js"></script>
   <script src="../js/config.js"></script>
+  <script src="../js/auth.js"></script>
   <script src="../js/scanner.js"></script>
   <script src="../js/warehouse3d.js"></script>
   <script src="../js/app.js"></script>

@@ -715,10 +715,46 @@ const video = document.getElementById('video');
 const toggleBtn = document.getElementById('toggle-btn');
 const statusEl = document.getElementById('status');
 const resultLotEl = document.getElementById('result-lot');
+const manualLotInput = document.getElementById('manual-lot-input');
+const manualLotStatus = document.getElementById('manual-lot-status');
 
 let running = false;
 let primaryScanner = null;
 const LOT_PATTERN = /^\d{7}$/;
+
+function switchPrimaryInputMode(mode) {
+  const scanMode = document.getElementById('primary-scan-mode');
+  const manualMode = document.getElementById('primary-manual-mode');
+  const scanButton = document.getElementById('primary-mode-scan');
+  const manualButton = document.getElementById('primary-mode-manual');
+  const isScanMode = mode === 'scan';
+
+  if (scanMode) scanMode.style.display = isScanMode ? 'block' : 'none';
+  if (manualMode) manualMode.style.display = isScanMode ? 'none' : 'block';
+  scanButton?.classList.toggle('active', isScanMode);
+  manualButton?.classList.toggle('active', !isScanMode);
+  scanButton?.setAttribute('aria-selected', String(isScanMode));
+  manualButton?.setAttribute('aria-selected', String(!isScanMode));
+
+  if (!isScanMode) {
+    stopScanner();
+    if (manualLotStatus) manualLotStatus.textContent = 'กรอกตัวเลข แล้วกดค้นหา';
+    manualLotInput?.focus();
+  }
+}
+
+function lookupManualLot() {
+  const lotCode = String(manualLotInput?.value || '').trim();
+  if (!/^\d+$/.test(lotCode)) {
+    if (manualLotStatus) manualLotStatus.textContent = 'กรุณากรอกตัวเลขเท่านั้น';
+    manualLotInput?.focus();
+    return;
+  }
+
+  if (resultLotEl) resultLotEl.textContent = lotCode;
+  if (manualLotStatus) manualLotStatus.textContent = `กำลังค้นหา Lot: ${lotCode}`;
+  handleScannerLookup(lotCode);
+}
 
 function processRawScan(code, format) {
   onCodeConfirmed(String(code).trim(), format);

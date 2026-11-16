@@ -141,13 +141,41 @@
       <div id="view-scanner" class="app-view scroll-view">
         <div class="page-wrap scanner-landing-wrap">
           <div id="warn" class="scan-warning-msg"></div>
-          <button id="toggle-btn" class="btn btn-primary" style="margin-bottom: 10px;">เปิดกล้องสแกน</button>
-          <div id="status" class="scan-status-msg"></div>
+          <div class="segmented-control scanner-mode-switch" role="tablist" aria-label="วิธีระบุ Lot">
+            <button type="button" class="segment-btn active" id="primary-mode-scan" role="tab" aria-selected="true" onclick="switchPrimaryInputMode('scan')">
+              <svg class="ic ic-sm"><use href="#i-camera"/></svg> สแกนบาร์โค้ด
+            </button>
+            <button type="button" class="segment-btn" id="primary-mode-manual" role="tab" aria-selected="false" onclick="switchPrimaryInputMode('manual')">
+              <svg class="ic ic-sm"><use href="#i-search"/></svg> กรอกเลข Lot
+            </button>
+          </div>
 
-          <!-- Element 1: Scanner Viewport -->
-          <div class="scanner-container">
-            <video id="video" class="scanner-video-feed" playsinline muted></video>
-            <div class="overlay scanner-target-reticle"></div>
+          <div id="primary-scan-mode">
+            <button id="toggle-btn" class="btn btn-primary" style="margin-bottom: 10px;">เปิดกล้องสแกน</button>
+            <div id="status" class="scan-status-msg"></div>
+
+            <!-- Element 1: Scanner Viewport -->
+            <div class="scanner-container">
+              <video id="video" class="scanner-video-feed" playsinline muted></video>
+              <div class="overlay scanner-target-reticle"></div>
+            </div>
+          </div>
+
+          <div id="primary-manual-mode" style="display:none; width:100%; max-width:480px;">
+            <label for="manual-lot-input">กรอกเลข Lot</label>
+            <div class="input-with-action">
+              <input
+                type="tel"
+                id="manual-lot-input"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                autocomplete="off"
+                placeholder="กรอกตัวเลข Lot"
+                aria-label="เลข Lot"
+              />
+              <button type="button" class="btn btn-primary" onclick="lookupManualLot()">ค้นหา</button>
+            </div>
+            <div id="manual-lot-status" class="mini-scan-status">กรอกตัวเลข แล้วกดค้นหา</div>
           </div>
 
           <!-- Active Scan Result Area -->

@@ -807,12 +807,15 @@ function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
     const userEmail = verifyGoogleIdToken(payload.idToken);
+    console.log(`AUTH CHECK: ${userEmail || 'TOKEN_REJECTED'}`);
     if (!isAllowedUser(userEmail)) {
       return accessDeniedResponse(userEmail);
     }
     activeRequestUserEmail = userEmail;
 
-    console.log('PAYLOAD RECEIVED:', JSON.stringify(payload));
+    const logPayload = { ...payload };
+    delete logPayload.idToken;
+    console.log('PAYLOAD RECEIVED:', JSON.stringify(logPayload));
 
     let result;
 

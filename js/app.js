@@ -798,8 +798,8 @@ async function handleScannerLookup(lotCode) {
     
     if (invDetails) invDetails.style.display = 'block';
     if (statusEl) statusEl.textContent = 'โหลดข้อมูลเสร็จสิ้น';
-  } else { 
-    if (statusEl) statusEl.textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อ'; 
+  } else {
+    if (statusEl) statusEl.textContent = res?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ';
   }
 }
 

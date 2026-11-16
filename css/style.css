@@ -670,7 +670,9 @@ h1, h2, h3 {
 
 .scanner-camera-toggle {
   display: block;
-  min-width: 220px;
+  width: 100%;
+  max-width: 480px;
+  box-sizing: border-box;
   min-height: 48px;
   margin: 0 auto 10px;
   padding: 10px 24px;

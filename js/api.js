@@ -19,6 +19,7 @@ async function safeFetch(action, payload = {}) {
   try {
     const response = await fetch(CONFIG.API_URL, {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "text/plain;charset=utf-8"
       },

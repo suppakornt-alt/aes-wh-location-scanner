@@ -4,6 +4,7 @@
 let masterStaffItems = [], masterAuditItems = [], masterCatalog = [];
 let currentTheme = APP_CONFIG.defaultTheme, currentView = 'scanner';
 let currentRelocateMode = 'existing', resolvedAddLot = '';
+let currentRelocateSku = '';
 const currentUserEmail = APP_CONFIG.currentUserEmail;
 const { tileSize: TILE_SIZE, levelHeight: LEVEL_HEIGHT, gap: GAP } = WAREHOUSE_CONFIG;
 const DESKTOP_MIN = APP_CONFIG.desktopMinWidth;
@@ -523,6 +524,7 @@ function openRelocateModal(locId, sku, currentQty, unitText) {
   if (!modal) return;
   modal.style.display = 'flex';
   document.getElementById('relocate-loc-id').value = locId;
+  currentRelocateSku = String(sku || '').trim();
   document.getElementById('relocate-sku-title').innerText = `${sku} · คงเหลือ ${currentQty} ${unitText}`;
   document.getElementById('relocate-qty').value = currentQty;
   document.getElementById('relocate-qty').setAttribute('max', currentQty);
@@ -546,10 +548,11 @@ function switchRelocateMode(mode) {
   if (manualFields) manualFields.style.display = mode === 'manual' ? 'grid' : 'none';
 }
 
-function getDestinationOptions(sourceLocId) {
+function getDestinationOptions(sourceLocId, sourceSku) {
   const unique = new Map();
   masterStaffItems.forEach(item => {
     if (String(item.locId) === String(sourceLocId)) return;
+    if (String(item.sku || '').trim() !== String(sourceSku || '').trim()) return;
     const key = [item.colNameStart, item.rowStart, item.colNameEnd, item.rowEnd, item.minLvl, item.maxLvl].join('|');
     if (!unique.has(key)) unique.set(key, item);
   });
@@ -560,7 +563,7 @@ function populateRelocateDestinations(sourceLocId, query = '') {
   const select = document.getElementById('relocate-destination');
   if (!select) return;
   const normalized = String(query).trim().toLowerCase();
-  const options = getDestinationOptions(sourceLocId).filter(item =>
+  const options = getDestinationOptions(sourceLocId, currentRelocateSku).filter(item =>
     !normalized || String(item.displayLoc || '').toLowerCase().includes(normalized)
   );
   select.innerHTML = options.length

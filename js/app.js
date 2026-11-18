@@ -355,42 +355,74 @@ async function handleStockAction(actionType, locId, sku, unit, maxQty = 0) {
 // Manual lot entry can support exceptional numeric lots longer than camera labels.
 async function promptEditLot(locId, sku, currentLot) {
   const isDark = currentTheme === 'dark';
-  const { value: newLot } = await Swal.fire({
-    title: 'แก้ไข Lot Number',
-    html: `
-      <div style="text-align:left; font-size:15px; line-height:1.6; color:var(--text-muted); margin-bottom:8px;">
-        <strong>SKU:</strong> ${esc(sku)}<br>
-        <strong>Lot เดิม:</strong> ${currentLot ? esc(currentLot) : '<em>(ยังไม่ระบุ)</em>'}
-      </div>
-    `,
-    input: 'text',
-    inputLabel: 'ระบุ Lot Number ใหม่ (ตัวเลขไม่เกิน 20 หลัก)',
-    inputValue: currentLot || '',
-    inputPlaceholder: 'เช่น 2410069',
-    inputAttributes: {
-      maxlength: 20,
-      inputmode: 'numeric',
-      autocapitalize: 'off',
-      autocorrect: 'off'
-    },
-    showCancelButton: true,
-    confirmButtonText: 'บันทึก',
-    cancelButtonText: 'ยกเลิก',
-    background: isDark ? '#161b22' : '#ffffff',
-    color: isDark ? '#e6edf3' : '#1f2328',
-    confirmButtonColor: '#238636',
-    cancelButtonColor: '#30363d',
-    preConfirm: (val) => {
-      const clean = (val || '').trim();
-      if (clean && !/^\d{1,20}$/.test(clean)) {
-        Swal.showValidationMessage('Lot Number ต้องเป็นตัวเลขไม่เกิน 20 หลัก');
-        return false;
-      }
-      return clean;
-    }
-  });
+  const displayedLot = String(document.getElementById('result-lot')?.textContent || '').trim();
+  const justScannedLot = currentView === 'scanner' && lastScannedLot === displayedLot ? lastScannedLot : '';
+  let newLot;
 
-  if (newLot === undefined) return;
+  if (justScannedLot) {
+    const choice = await Swal.fire({
+      title: 'เลือก Lot ที่จะบันทึก',
+      html: `
+        <div style="text-align:left; font-size:15px; line-height:1.7; color:var(--text-muted);">
+          <strong>SKU:</strong> ${esc(sku)}<br>
+          <strong>Lot เดิม:</strong> ${currentLot ? esc(currentLot) : '<em>(ยังไม่ระบุ)</em>'}<br>
+          <strong>Lot ที่เพิ่งสแกน:</strong> ${esc(justScannedLot)}
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      showDenyButton: true,
+      confirmButtonText: `ใช้ Lot ${esc(justScannedLot)}`,
+      denyButtonText: 'กรอก Lot ใหม่',
+      cancelButtonText: 'ยกเลิก',
+      background: isDark ? '#161b22' : '#ffffff',
+      color: isDark ? '#e6edf3' : '#1f2328',
+      confirmButtonColor: '#238636'
+    });
+
+    if (choice.isConfirmed) newLot = justScannedLot;
+    else if (!choice.isDenied) return;
+  }
+
+  if (newLot === undefined) {
+    const manualResult = await Swal.fire({
+      title: 'กรอก Lot Number ใหม่',
+      html: `
+        <div style="text-align:left; font-size:15px; line-height:1.6; color:var(--text-muted); margin-bottom:8px;">
+          <strong>SKU:</strong> ${esc(sku)}<br>
+          <strong>Lot เดิม:</strong> ${currentLot ? esc(currentLot) : '<em>(ยังไม่ระบุ)</em>'}
+        </div>
+      `,
+      input: 'tel',
+      inputLabel: 'ตัวเลขไม่เกิน 20 หลัก',
+      inputValue: currentLot || '',
+      inputPlaceholder: 'เช่น 2410069',
+      inputAttributes: {
+        maxlength: 20,
+        inputmode: 'numeric',
+        pattern: '[0-9]*',
+        autocapitalize: 'off',
+        autocorrect: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'บันทึก',
+      cancelButtonText: 'ยกเลิก',
+      background: isDark ? '#161b22' : '#ffffff',
+      color: isDark ? '#e6edf3' : '#1f2328',
+      confirmButtonColor: '#238636',
+      cancelButtonColor: '#30363d',
+      preConfirm: (val) => {
+        const clean = (val || '').trim();
+        if (clean && !/^\d{1,20}$/.test(clean)) {
+          Swal.showValidationMessage('Lot Number ต้องเป็นตัวเลขไม่เกิน 20 หลัก');
+          return false;
+        }
+        return clean;
+      }
+    });
+    if (!manualResult.isConfirmed) return;
+    newLot = manualResult.value;
+  }
 
   Swal.fire({
     title: 'กำลังอัปเดต Lot...',
@@ -852,6 +884,7 @@ const manualLotStatus = document.getElementById('manual-lot-status');
 
 let running = false;
 let primaryScanner = null;
+let lastScannedLot = '';
 const LOT_PATTERN = /^\d{7}$/;
 
 function switchPrimaryInputMode(mode) {
@@ -884,6 +917,7 @@ function lookupManualLot() {
   }
 
   if (resultLotEl) resultLotEl.textContent = lotCode;
+  lastScannedLot = '';
   if (manualLotStatus) manualLotStatus.textContent = `กำลังค้นหา Lot: ${lotCode}`;
   handleScannerLookup(lotCode);
 }
@@ -894,6 +928,7 @@ function processRawScan(code, format) {
 
 function onCodeConfirmed(code, format) {
   stopScanner();
+  lastScannedLot = code;
   if (resultLotEl) resultLotEl.textContent = code;
   if (statusEl) statusEl.textContent = 'ยืนยันรหัสสำเร็จ!';
   if (navigator.vibrate) navigator.vibrate(100);

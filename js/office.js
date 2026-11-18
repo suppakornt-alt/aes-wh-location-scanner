@@ -51,7 +51,7 @@ const ORD_SEPARATOR = '';
 const buildOrd = (digits) => `${ORD_PREFIX}${ORD_SEPARATOR}${digits}`;
 
 // TODO (login step): replace with the email from Google sign-in.
-const currentUserEmail = 'staff@aes.co.th';
+let currentUserEmail = 'staff@aes.co.th';
 
 // ------------------------------------------
 // 2. STATE
@@ -563,7 +563,15 @@ function wireEvents() {
 // ------------------------------------------
 // 9. INIT
 // ------------------------------------------
-window.onload = () => {
+window.onload = async () => {
+  if (!requireAuthenticatedPage('../index.html')) return;
+  const authResult = await safeFetch('authCheck');
+  if (!authResult?.success) {
+    await Swal.fire({ icon: 'error', title: 'ไม่มีสิทธิ์ใช้งาน', text: authResult?.message || 'กรุณาเลือกบัญชีที่ได้รับอนุญาต' });
+    signOutGoogle();
+    return;
+  }
+  currentUserEmail = getGoogleProfile()?.email || currentUserEmail;
   document.getElementById('sidebar-user').textContent = currentUserEmail;
   document.getElementById('ord-prefix').textContent = ORD_PREFIX + ORD_SEPARATOR;
   blocks = [newBlock()];

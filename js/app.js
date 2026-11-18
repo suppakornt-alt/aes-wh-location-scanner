@@ -3,6 +3,7 @@
 // ==========================================
 let masterStaffItems = [], masterAuditItems = [], masterCatalog = [];
 let currentTheme = APP_CONFIG.defaultTheme, currentView = 'scanner';
+let currentRelocateMode = 'existing', resolvedAddLot = '';
 const currentUserEmail = APP_CONFIG.currentUserEmail;
 const { tileSize: TILE_SIZE, levelHeight: LEVEL_HEIGHT, gap: GAP } = WAREHOUSE_CONFIG;
 const DESKTOP_MIN = APP_CONFIG.desktopMinWidth;
@@ -88,7 +89,7 @@ function locRowHTML(loc, sku, unit) {
           <span class="loc-pill-qty">${esc(loc.qty)} ${esc(unit)}</span>
         </div>
         <div class="loc-meta-sub">
-          <button type="button" class="lot-pill-editable ${emptyClass}" data-act="edit-lot" ${attrs} title="แตะเพื่อแก้ไข Lot (ไม่เกิน 7 หลัก)">
+          <button type="button" class="lot-pill-editable ${emptyClass}" data-act="edit-lot" ${attrs} title="แตะเพื่อแก้ไข Lot">
             <svg class="ic" style="width:12px; height:12px;"><use href="#i-edit"/></svg>
             <span class="lot-val">${lotLabel}</span>
           </button>
@@ -98,6 +99,7 @@ function locRowHTML(loc, sku, unit) {
         <button class="btn-op btn-in" data-act="in" ${attrs}>${icon('plus')} เติม</button>
         <button class="btn-op btn-out" data-act="out" ${attrs}>${icon('minus')} เบิก</button>
         <button class="btn-op btn-relocate" data-act="move" ${attrs}>${icon('swap')} ย้าย</button>
+        <button class="btn-op btn-close-location" data-act="close" ${attrs} title="ปิดหรือเคลียร์พิกัด" aria-label="ปิดหรือเคลียร์พิกัด">${icon('trash')}</button>
       </div>
     </div>
   `;
@@ -223,6 +225,69 @@ function handleListAction(e) {
     openRelocateModal(loc, sku, Number(qty), unit);
   } else if (act === 'edit-lot') {
     promptEditLot(loc, sku, lot);
+  } else if (act === 'close') {
+    requestCloseLocation(loc, sku, Number(qty), unit);
+  }
+}
+
+async function requestCloseLocation(locId, sku, qty, unit) {
+  if (qty <= 0) {
+    const result = await Swal.fire({
+      icon: 'question',
+      title: 'ปิดพิกัดว่างนี้?',
+      text: 'รายการจะถูกเก็บเป็นประวัติ และซ่อนจากหน้าทำงาน',
+      showCancelButton: true,
+      confirmButtonText: 'ปิดพิกัด',
+      cancelButtonText: 'ยกเลิก'
+    });
+    if (!result.isConfirmed) return;
+    return closeLocationRecord(locId, 'empty', 'ปิดพิกัดว่าง');
+  }
+
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: 'พิกัดนี้ยังมีสินค้า',
+    html: `<strong>${esc(sku)}</strong><br>คงเหลือ ${qty} ${esc(unit)}<br><small>อย่าลบจำนวนออกจากระบบโดยไม่มีร่องรอย</small>`,
+    showCancelButton: true,
+    showDenyButton: true,
+    confirmButtonText: 'ย้ายทั้งหมด',
+    denyButtonText: 'พิกัดไม่มีอยู่จริง',
+    cancelButtonText: 'ยกเลิก'
+  });
+
+  if (result.isConfirmed) {
+    openRelocateModal(locId, sku, qty, unit);
+  } else if (result.isDenied) {
+    const reasonResult = await Swal.fire({
+      icon: 'warning',
+      title: 'ส่งเข้ารายการตรวจสอบ',
+      input: 'textarea',
+      inputLabel: 'เหตุผลที่พิกัดนี้ไม่มีอยู่จริง',
+      inputPlaceholder: 'เช่น กองสินค้าถูกย้ายแล้ว แต่ไม่ได้บันทึก',
+      showCancelButton: true,
+      confirmButtonText: 'ยืนยันและเก็บจำนวนไว้',
+      preConfirm: value => {
+        if (!String(value || '').trim()) {
+          Swal.showValidationMessage('กรุณาระบุเหตุผล');
+          return false;
+        }
+        return String(value).trim();
+      }
+    });
+    if (reasonResult.isConfirmed) await closeLocationRecord(locId, 'cleanup', reasonResult.value);
+  }
+}
+
+async function closeLocationRecord(locId, mode, reason) {
+  Swal.fire({ title: 'กำลังอัปเดตพิกัด...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+  const res = await safeFetch('closeLocation', { locId, mode, reason });
+  if (res?.success) {
+    Swal.fire({ icon: 'success', title: 'อัปเดตพิกัดแล้ว', timer: 1300, showConfirmButton: false });
+    await loadData();
+    const activeLot = document.getElementById('result-lot')?.textContent;
+    if (currentView === 'scanner' && activeLot && activeLot !== '-') handleScannerLookup(activeLot);
+  } else {
+    Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: res?.message || 'API Failed' });
   }
 }
 
@@ -287,7 +352,7 @@ async function handleStockAction(actionType, locId, sku, unit, maxQty = 0) {
   }
 }
 
-// Inline Lot Edit with <= 7 Digits Rule
+// Manual lot entry can support exceptional numeric lots longer than camera labels.
 async function promptEditLot(locId, sku, currentLot) {
   const isDark = currentTheme === 'dark';
   const { value: newLot } = await Swal.fire({
@@ -299,11 +364,12 @@ async function promptEditLot(locId, sku, currentLot) {
       </div>
     `,
     input: 'text',
-    inputLabel: 'ระบุ Lot Number ใหม่ (ความยาวไม่เกิน 7 หลัก)',
+    inputLabel: 'ระบุ Lot Number ใหม่ (ตัวเลขไม่เกิน 20 หลัก)',
     inputValue: currentLot || '',
     inputPlaceholder: 'เช่น 2410069',
     inputAttributes: {
-      maxlength: 15,
+      maxlength: 20,
+      inputmode: 'numeric',
       autocapitalize: 'off',
       autocorrect: 'off'
     },
@@ -316,8 +382,8 @@ async function promptEditLot(locId, sku, currentLot) {
     cancelButtonColor: '#30363d',
     preConfirm: (val) => {
       const clean = (val || '').trim();
-      if (clean.length > 7) {
-        Swal.showValidationMessage(`Lot Number ห้ามเกิน 7 หลัก (ปัจจุบัน ${clean.length} หลัก)`);
+      if (clean && !/^\d{1,20}$/.test(clean)) {
+        Swal.showValidationMessage('Lot Number ต้องเป็นตัวเลขไม่เกิน 20 หลัก');
         return false;
       }
       return clean;
@@ -423,6 +489,51 @@ function openRelocateModal(locId, sku, currentQty, unitText) {
   document.getElementById('relocate-sku-title').innerText = `${sku} · คงเหลือ ${currentQty} ${unitText}`;
   document.getElementById('relocate-qty').value = currentQty;
   document.getElementById('relocate-qty').setAttribute('max', currentQty);
+  populateRelocateDestinations(locId);
+  switchRelocateMode('existing');
+}
+
+function setRelocateFullQty() {
+  const input = document.getElementById('relocate-qty');
+  if (input) input.value = input.getAttribute('max') || '';
+}
+
+function switchRelocateMode(mode) {
+  currentRelocateMode = mode;
+  document.querySelectorAll('[data-relocate-mode]').forEach(btn => btn.classList.toggle('active', btn.dataset.relocateMode === mode));
+  const existingPanel = document.getElementById('relocate-existing-panel');
+  const coordinatePanel = document.getElementById('relocate-coordinate-panel');
+  const manualFields = document.getElementById('relocate-manual-coordinate-fields');
+  if (existingPanel) existingPanel.style.display = mode === 'existing' ? 'block' : 'none';
+  if (coordinatePanel) coordinatePanel.style.display = mode === 'existing' ? 'none' : 'block';
+  if (manualFields) manualFields.style.display = mode === 'manual' ? 'grid' : 'none';
+}
+
+function getDestinationOptions(sourceLocId) {
+  const unique = new Map();
+  masterStaffItems.forEach(item => {
+    if (String(item.locId) === String(sourceLocId)) return;
+    const key = [item.colNameStart, item.rowStart, item.colNameEnd, item.rowEnd, item.minLvl, item.maxLvl].join('|');
+    if (!unique.has(key)) unique.set(key, item);
+  });
+  return Array.from(unique.values()).sort((a, b) => String(a.displayLoc).localeCompare(String(b.displayLoc), 'th'));
+}
+
+function populateRelocateDestinations(sourceLocId, query = '') {
+  const select = document.getElementById('relocate-destination');
+  if (!select) return;
+  const normalized = String(query).trim().toLowerCase();
+  const options = getDestinationOptions(sourceLocId).filter(item =>
+    !normalized || String(item.displayLoc || '').toLowerCase().includes(normalized)
+  );
+  select.innerHTML = options.length
+    ? options.map(item => `<option value="${esc(item.locId)}">${esc(item.displayLoc)} · ${esc(item.sku)} · ${esc(item.lotNo || 'ไม่มี Lot')}</option>`).join('')
+    : '<option value="">ไม่พบพิกัด กรุณาเลือก “พิกัดใหม่”</option>';
+}
+
+function filterRelocateDestinations() {
+  const sourceLocId = document.getElementById('relocate-loc-id')?.value || '';
+  populateRelocateDestinations(sourceLocId, document.getElementById('relocate-destination-search')?.value || '');
 }
 
 function closeRelocateModal() {
@@ -443,12 +554,19 @@ async function submitRelocate() {
   const payload = {
     locId: locId,
     qtyToMove: qtyToMove,
+    destinationMode: currentRelocateMode,
+    destinationLocId: document.getElementById('relocate-destination')?.value || '',
     newColStart: document.getElementById('relocate-col-start').value,
     rowStartNum: Number(document.getElementById('relocate-row-start').value),
     newColEnd: document.getElementById('relocate-col-end').value,
     rowEndNum: Number(document.getElementById('relocate-row-end').value),
     newLevels: getSelectedLevels('level-selector-relocate')
   };
+
+  if (currentRelocateMode === 'existing' && !payload.destinationLocId) {
+    Swal.fire({ icon: 'warning', title: 'กรุณาเลือกพิกัดปลายทาง', text: 'หากไม่มีในรายการ ให้เลือกโหมด “พิกัดใหม่”' });
+    return;
+  }
 
   Swal.fire({
     title: 'กำลังย้ายพิกัด...',
@@ -506,6 +624,7 @@ function closeNewLocationModal() {
 }
 
 function resetAddForm() {
+  resolvedAddLot = '';
   const hide = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
   hide('add-product-preview-card');
   hide('add-lot-field-group');
@@ -517,6 +636,7 @@ function resetAddForm() {
   setVal('add-manual-lot-input', '');
   setVal('add-final-lot', '');
   setVal('add-qty', '');
+  setAddLotChoice('scanned');
 
   const statusEl = document.getElementById('add-modal-scan-status');
   if (statusEl) statusEl.textContent = 'พร้อมสำหรับการสแกน';
@@ -528,8 +648,8 @@ async function triggerManualLotLookup() {
     Swal.fire({ icon: 'warning', title: 'แจ้งเตือน', text: 'กรุณากรอก Lot Number' });
     return;
   }
-  if (lotInput.length > 7) {
-    Swal.fire({ icon: 'warning', title: 'แจ้งเตือน', text: 'Lot Number ต้องไม่เกิน 7 หลัก' });
+  if (!/^\d{1,20}$/.test(lotInput)) {
+    Swal.fire({ icon: 'warning', title: 'แจ้งเตือน', text: 'Lot Number ต้องเป็นตัวเลขไม่เกิน 20 หลัก' });
     return;
   }
   await resolveLotForAdd(lotInput);
@@ -558,7 +678,8 @@ async function resolveLotForAdd(lotCode) {
     setVal('add-resolved-name', data.productName);
     setVal('add-resolved-type', data.type || 'ยางนอก');
     setVal('add-resolved-brand', data.brand || '-');
-    setVal('add-final-lot', lotCode);
+    resolvedAddLot = String(lotCode);
+    setAddLotChoice('scanned');
 
     const fieldGroup = document.getElementById('add-lot-field-group');
     if (fieldGroup) fieldGroup.style.display = 'block';
@@ -570,6 +691,17 @@ async function resolveLotForAdd(lotCode) {
   } else {
     Swal.fire({ icon: 'error', title: 'ไม่พบข้อมูล', text: 'ไม่พบรหัสสินค้าที่ตรงกับ Lot ' + lotCode });
   }
+}
+
+function setAddLotChoice(choice) {
+  document.querySelectorAll('[data-lot-choice]').forEach(btn => btn.classList.toggle('active', btn.dataset.lotChoice === choice));
+  const input = document.getElementById('add-final-lot');
+  if (!input) return;
+  const manual = choice === 'manual';
+  input.readOnly = !manual;
+  input.value = manual ? '' : resolvedAddLot;
+  input.placeholder = manual ? 'กรอก Lot ตัวเลข (ไม่เกิน 20 หลัก)' : 'Lot ที่สแกนหรือค้นหา';
+  if (manual) input.focus();
 }
 
 async function toggleModalCamera() {
@@ -632,8 +764,8 @@ async function submitNewLocation() {
   const lotNo = (document.getElementById('add-final-lot')?.value || '').trim();
   const qty = Number(document.getElementById('add-qty').value);
 
-  if (lotNo.length > 7) {
-    Swal.fire({ icon: 'warning', title: 'แจ้งเตือน', text: 'Lot Number ต้องมีความยาวไม่เกิน 7 หลัก' });
+  if (lotNo && !/^\d{1,20}$/.test(lotNo)) {
+    Swal.fire({ icon: 'warning', title: 'แจ้งเตือน', text: 'Lot Number ต้องเป็นตัวเลขไม่เกิน 20 หลัก' });
     return;
   }
 
@@ -745,8 +877,8 @@ function switchPrimaryInputMode(mode) {
 
 function lookupManualLot() {
   const lotCode = String(manualLotInput?.value || '').trim();
-  if (!/^\d+$/.test(lotCode)) {
-    if (manualLotStatus) manualLotStatus.textContent = 'กรุณากรอกตัวเลขเท่านั้น';
+  if (!/^\d{1,20}$/.test(lotCode)) {
+    if (manualLotStatus) manualLotStatus.textContent = 'กรุณากรอกตัวเลขไม่เกิน 20 หลัก';
     manualLotInput?.focus();
     return;
   }
@@ -786,6 +918,8 @@ async function handleScannerLookup(lotCode) {
     } else {
       if (headerEl) headerEl.textContent = `[ไม่พบรหัสสินค้า] | ${data.productName}`;
     }
+
+    renderScannerReconciliation(data.productCode && data.productCode !== '-' ? data.reconciliation : null, data.unit || 'ชิ้น');
     
     const locList = document.getElementById('scanner-locations-list');
     if (locList) {
@@ -801,6 +935,42 @@ async function handleScannerLookup(lotCode) {
   } else {
     if (statusEl) statusEl.textContent = res?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ';
   }
+}
+
+function renderScannerReconciliation(reconciliation, unit) {
+  const card = document.getElementById('scanner-reconciliation');
+  if (!card || !reconciliation) {
+    if (card) card.style.display = 'none';
+    return;
+  }
+
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  const format = value => `${Number(value || 0).toLocaleString('th-TH')} ${unit}`;
+  setText('recon-frontline', format(reconciliation.frontlineQty));
+  setText('recon-erp', format(reconciliation.erpQty));
+  setText('recon-diff', format(reconciliation.difference));
+
+  const status = document.getElementById('recon-status');
+  const labels = {
+    EQUAL: 'ยอดหน้างานตรงกับ ERP',
+    UNDER: 'ยอดหน้างานน้อยกว่า ERP',
+    OVER: 'ยอดหน้างานมากกว่า ERP'
+  };
+  if (status) {
+    status.className = `reconciliation-status status-${String(reconciliation.status || '').toLowerCase()}`;
+    status.textContent = labels[reconciliation.status] || 'ไม่สามารถเปรียบเทียบยอดได้';
+  }
+
+  const cleanup = document.getElementById('recon-cleanup');
+  if (cleanup) {
+    const qty = Number(reconciliation.cleanupQty || 0);
+    cleanup.style.display = qty > 0 ? 'block' : 'none';
+    cleanup.textContent = qty > 0 ? `มี ${format(qty)} อยู่ในรายการรอตรวจสอบพิกัด (ไม่รวมยอดหน้างาน)` : '';
+  }
+  card.style.display = 'block';
 }
 
 async function startScanner() {
@@ -838,12 +1008,14 @@ function stopScanner() {
 // ==========================================
 // 10. SYSTEM INITIALIZATION
 // ==========================================
-window.addEventListener('google-authenticated', () => {
-  loadData();
-});
-
-window.onload = () => {
-  initGoogleSignIn();
+window.onload = async () => {
+  if (!requireAuthenticatedPage('../index.html')) return;
+  const authResult = await safeFetch('authCheck');
+  if (!authResult?.success) {
+    await Swal.fire({ icon: 'error', title: 'ไม่มีสิทธิ์ใช้งาน', text: authResult?.message || 'กรุณาเลือกบัญชีที่ได้รับอนุญาต' });
+    signOutGoogle();
+    return;
+  }
   initCoordDropdowns();
   initThree();
 
@@ -856,5 +1028,5 @@ window.onload = () => {
     toggleBtn.addEventListener('click', () => (running ? stopScanner() : startScanner()));
   }
 
-  if (getGoogleIdToken()) loadData();
+  loadData();
 };

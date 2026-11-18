@@ -11,9 +11,10 @@ const CONFIG = {
 async function safeFetch(action, payload = {}) {
   const idToken = getGoogleIdToken();
   if (!idToken) {
+    window.location.replace(window.location.pathname.includes('/pages/') ? '../index.html' : 'index.html');
     return {
       success: false,
-      message: "Please sign in with Google first."
+      message: "กรุณาลงชื่อเข้าใช้ Google อีกครั้ง"
     };
   }
 
@@ -23,7 +24,8 @@ async function safeFetch(action, payload = {}) {
     idToken
   };
 
-  console.log("[API REQUEST]", requestBody);
+  // Never print the Google ID token to the browser console.
+  console.log("[API REQUEST]", { action, ...payload });
 
   try {
     const response = await fetch(CONFIG.API_URL, {

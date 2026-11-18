@@ -1764,3 +1764,54 @@ h1, h2, h3 {
   color: var(--text-muted);
   text-align: right;
 }
+/* Authentication-first landing */
+.login-gate {
+  width: min(100%, 420px);
+  margin: 34px auto 0;
+  padding: 28px;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  background: var(--bg-card);
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.login-icon { font-size: 38px; margin-bottom: 8px; }
+.google-signin-button { display: flex; justify-content: center; margin: 22px auto 12px; }
+.auth-status { color: var(--text-muted); font-size: 14px; }
+.chooser-user-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 24px 0 4px; color: var(--text-muted); }
+
+/* Scanner reconciliation */
+.reconciliation-card {
+  margin: 14px 0 18px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-card-subtle);
+}
+.reconciliation-heading { font-weight: 600; margin-bottom: 12px; }
+.reconciliation-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.reconciliation-grid > div { padding: 10px 8px; border-radius: 12px; background: var(--bg-card); text-align: center; }
+.reconciliation-grid span { display: block; color: var(--text-muted); font-size: 12px; }
+.reconciliation-grid strong { display: block; margin-top: 4px; font-size: 16px; }
+.reconciliation-status { margin-top: 12px; padding: 9px 12px; border-radius: 10px; font-weight: 600; text-align: center; }
+.status-equal { background: rgba(35, 134, 54, .12); color: #1a7f37; }
+.status-under { background: rgba(218, 54, 51, .12); color: #cf222e; }
+.status-over { background: rgba(130, 80, 223, .12); color: #8250df; }
+.reconciliation-cleanup { margin-top: 10px; color: #9a6700; font-size: 13px; text-align: center; }
+
+/* Relocation and cleanup controls */
+.btn-close-location { min-width: 42px; color: var(--accent-red, #cf222e); }
+.relocate-mode-switch { margin: 8px 0 14px; }
+.relocate-mode-switch .segment-btn { min-width: 0; padding-inline: 9px; font-size: 13px; }
+#relocate-existing-panel select { width: 100%; min-height: 156px; margin-top: 8px; }
+.lot-choice-switch { margin: 8px 0 10px; }
+
+@media (max-width: 600px) {
+  .login-gate { margin-top: 22px; padding: 22px 16px; }
+  .chooser-user-row { flex-direction: column; gap: 8px; }
+  .reconciliation-grid { grid-template-columns: 1fr; }
+  .reconciliation-grid > div { display: flex; justify-content: space-between; align-items: center; text-align: left; }
+  .reconciliation-grid strong { margin-top: 0; }
+  .relocate-mode-switch { display: grid; grid-template-columns: 1fr; }
+  .action-btn-group { flex-wrap: wrap; }
+}

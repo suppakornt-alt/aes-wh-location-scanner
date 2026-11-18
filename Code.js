@@ -79,6 +79,59 @@ function accessDeniedResponse(email) {
 
 // --- 2. CORE LOGIC ---
 
+// Formula and lifecycle columns may move as new fields are inserted after
+// DISPLAY_LOC. Resolve these columns by header name instead of fixed indexes.
+function getColumnIndexMap(headerRow) {
+  return headerRow.reduce((map, header, index) => {
+    const key = String(header || '').trim().toUpperCase();
+    if (key) map[key] = index;
+    return map;
+  }, {});
+}
+
+function getColumnValue(row, columnMap, headerName, fallback = '') {
+  const index = columnMap[String(headerName).toUpperCase()];
+  return index === undefined ? fallback : row[index];
+}
+
+const LOCATION_STATUS = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  INACTIVE_EMPTY: 'INACTIVE_EMPTY',
+  CLEANUP_REQUIRED: 'CLEANUP_REQUIRED'
+});
+
+function getLocationStatus(row, columnMap) {
+  return String(getColumnValue(row, columnMap, 'LOCATION_STATUS', '') || '')
+    .trim()
+    .toUpperCase() || LOCATION_STATUS.ACTIVE;
+}
+
+function isActiveLocationRow(row, columnMap) {
+  return getLocationStatus(row, columnMap) === LOCATION_STATUS.ACTIVE;
+}
+
+function setValueByHeader(sheet, sheetRow, columnMap, headerName, value) {
+  const index = columnMap[String(headerName).toUpperCase()];
+  if (index !== undefined) sheet.getRange(sheetRow, index + 1).setValue(value);
+}
+
+function setLocationLifecycle(sheet, sheetRow, status, userEmail, reason) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const columns = getColumnIndexMap(headers);
+  const isActive = status === LOCATION_STATUS.ACTIVE;
+
+  setValueByHeader(sheet, sheetRow, columns, 'LOCATION_STATUS', status);
+  setValueByHeader(sheet, sheetRow, columns, 'CLOSED_AT', isActive ? '' : new Date());
+  setValueByHeader(sheet, sheetRow, columns, 'CLOSED_BY', isActive ? '' : userEmail);
+  setValueByHeader(sheet, sheetRow, columns, 'CLOSED_REASON', isActive ? '' : String(reason || ''));
+}
+
+function appendActiveLocationRow(sheet, rowValues, userEmail) {
+  const sheetRow = appendRowAtRealLastRow(sheet, rowValues);
+  setLocationLifecycle(sheet, sheetRow, LOCATION_STATUS.ACTIVE, userEmail, '');
+  return sheetRow;
+}
+
 function getWarehouse3DData() {
   const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
   const stateSheet = ss.getSheetByName(CONFIG.SHEET_STATE);
@@ -101,19 +154,22 @@ function getWarehouse3DData() {
 
   const data = stateSheet.getDataRange().getValues();
   if (data.length <= 1) return [];
+  const stateColumns = getColumnIndexMap(data[0]);
 
   const boxes = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
+    if (!isActiveLocationRow(row, stateColumns)) continue;
     const qty = Number(row[6]) || 0; // Shifted from 5 to 6
     if (qty <= 0) continue;
 
     const sku = String(row[1] || '').trim();
     const meta = metaMap[sku] || { unit: 'เส้น', type: String(row[4] || 'ยางนอก') }; // 3 to 4
 
-    const latestSales = row[16] instanceof Date ? Utilities.formatDate(row[16], "GMT+7", "dd/MM/yyyy") : String(row[16] || '-');
-    const diffDays = Number(row[17]) || 0;
-    const criteria = String(row[18] || 'FAST').trim().toUpperCase();
+    const latestSalesValue = getColumnValue(row, stateColumns, 'LATEST_SALES');
+    const latestSales = latestSalesValue instanceof Date ? Utilities.formatDate(latestSalesValue, "GMT+7", "dd/MM/yyyy") : String(latestSalesValue || '-');
+    const diffDays = Number(getColumnValue(row, stateColumns, 'DIFF_DAYS')) || 0;
+    const criteria = String(getColumnValue(row, stateColumns, 'CRITERIA', 'FAST')).trim().toUpperCase();
 
     boxes.push({
       locId: String(row[0]),
@@ -161,9 +217,11 @@ function getStaffInventoryList() {
   }
 
   const data = stateSheet.getDataRange().getValues();
+  const stateColumns = getColumnIndexMap(data[0] || []);
   const list = [];
   for (let i = 1; i < data.length; i++) {
     const r = data[i];
+    if (!isActiveLocationRow(r, stateColumns)) continue;
     const qty = Number(r[6]) || 0; // 5 to 6
     if (qty <= 0) continue;
 
@@ -179,8 +237,18 @@ function getStaffInventoryList() {
       qty: qty,
       unit: meta.unit,
       displayLoc: String(r[15]), // 14 to 15
-      criteria: String(r[18] || 'FAST').trim().toUpperCase(),
-      diffDays: Number(r[17]) || 0
+      lotNo: String(r[3] || ''),
+      colNameStart: String(r[7] || ''),
+      colNameEnd: String(r[8] || ''),
+      colStart: Number(r[9]) || 0,
+      colEnd: Number(r[10]) || 0,
+      rowStart: Number(r[11]) || 0,
+      rowEnd: Number(r[12]) || 0,
+      minLvl: Number(r[13]) || 1,
+      maxLvl: Number(r[14]) || 1,
+      locationStatus: getLocationStatus(r, stateColumns),
+      criteria: String(getColumnValue(r, stateColumns, 'CRITERIA', 'FAST')).trim().toUpperCase(),
+      diffDays: Number(getColumnValue(r, stateColumns, 'DIFF_DAYS')) || 0
     });
   }
   return list;
@@ -220,7 +288,9 @@ function getReconciliationData() {
   const stateMap = {};
   if (stateSheet) {
     const stateData = stateSheet.getDataRange().getValues();
+    const stateColumns = getColumnIndexMap(stateData[0] || []);
     for (let i = 1; i < stateData.length; i++) {
+      if (!isActiveLocationRow(stateData[i], stateColumns)) continue;
       const sSku = String(stateData[i][1] || '').trim();
       const sQty = Number(stateData[i][6]) || 0; // 5 to 6
       if (!sSku || sQty <= 0) continue;
@@ -247,7 +317,7 @@ function getReconciliationData() {
     const unit = String(row[4] || 'เส้น').trim();
     const brand = String(row[5] || '').trim();
     const type = String(row[6] || 'ยางนอก').trim();
-    const stateQty = Number(row[7]) || 0; 
+    const stateQty = (stateMap[sku] || []).reduce((sum, location) => sum + Number(location.qty || 0), 0);
     const diff = erpQty - stateQty;
 
     if (diff !== 0) {
@@ -299,6 +369,18 @@ function addNewLocation(payload) {
   const { sku, name, brand, type, lotNo, colStartStr, rowStartNum, colEndStr, rowEndNum, levelsArray, qty } = payload;
   const userEmail = getCurrentUserEmail();
 
+  if (!String(sku || '').trim()) return { success: false, message: 'ไม่พบรหัสสินค้า' };
+  if (String(lotNo || '').trim() && !/^\d{1,20}$/.test(String(lotNo).trim())) {
+    return { success: false, message: 'Lot Number ต้องเป็นตัวเลขไม่เกิน 20 หลัก' };
+  }
+  if (!Number.isFinite(Number(qty)) || Number(qty) <= 0) {
+    return { success: false, message: 'จำนวนสินค้าต้องมากกว่า 0' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+
   const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
   const stateSheet = ss.getSheetByName(CONFIG.SHEET_STATE);
 
@@ -340,67 +422,92 @@ function addNewLocation(payload) {
       displayLoc
     ];
 
-    appendRowAtRealLastRow(stateSheet, rowData);
+    appendActiveLocationRow(stateSheet, rowData, userEmail);
   });
 
   const locSummary = `${colStartStr}${rowMin}:${colEndStr}${rowMax}`;
   logTransaction(userEmail, 'รับเข้า (RECEIVE)', sku, qty, '-', locSummary, `เพิ่มพิกัดใหม่ (Lot: ${lotNo || '-'})`);
   return { success: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function pickStock(locId, qtyToPick) {
-  const userEmail = getCurrentUserEmail();
-  const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
-  const sheet = ss.getSheetByName(CONFIG.SHEET_STATE);
-  const data = sheet.getDataRange().getValues();
+  const pickQty = Number(qtyToPick);
+  if (!Number.isFinite(pickQty) || pickQty <= 0) return { success: false, message: 'จำนวนเบิกไม่ถูกต้อง' };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const userEmail = getCurrentUserEmail();
+    const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
+    const sheet = ss.getSheetByName(CONFIG.SHEET_STATE);
+    const data = sheet.getDataRange().getValues();
+    const columns = getColumnIndexMap(data[0] || []);
 
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(locId)) {
-      const currentQty = Number(data[i][6]); // 5 to 6
-      const newQty = Math.max(0, currentQty - Number(qtyToPick));
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(locId)) {
+        if (!isActiveLocationRow(data[i], columns)) return { success: false, message: 'พิกัดนี้ไม่ได้เปิดใช้งาน' };
+        const currentQty = Number(data[i][6]) || 0;
+        if (pickQty > currentQty) return { success: false, message: 'จำนวนเบิกมากกว่ายอดคงเหลือ' };
+        const newQty = currentQty - pickQty;
 
-      if (newQty === 0) {
-        sheet.deleteRow(i + 1);
-      } else {
-        sheet.getRange(i + 1, 7).setValue(newQty); // 6 to 7 (Column G is 7)
+        sheet.getRange(i + 1, 7).setValue(newQty);
+        if (newQty === 0) {
+          setLocationLifecycle(sheet, i + 1, LOCATION_STATUS.INACTIVE_EMPTY, userEmail, 'เบิกสินค้าจนหมดพิกัด');
+        }
+
+        logTransaction(userEmail, 'เบิกออก (PICK)', data[i][1], -pickQty, data[i][15], '-', 'เบิกด่วน');
+        return { success: true, remaining: newQty };
       }
-
-      logTransaction(userEmail, 'เบิกออก (PICK)', data[i][1], -qtyToPick, data[i][15], '-', 'เบิกด่วน'); // 14 to 15
-      return { success: true, remaining: newQty };
     }
+    return { success: false, message: 'ไม่พบ ID พิกัดนี้' };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: false, message: 'ไม่พบ ID พิกัดนี้' };
 }
 
 function addStockIn(locId, qtyToAdd) {
-  const userEmail = getCurrentUserEmail();
-  const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
-  const sheet = ss.getSheetByName(CONFIG.SHEET_STATE);
-  const data = sheet.getDataRange().getValues();
+  const addQty = Number(qtyToAdd);
+  if (!Number.isFinite(addQty) || addQty <= 0) return { success: false, message: 'จำนวนเติมไม่ถูกต้อง' };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const userEmail = getCurrentUserEmail();
+    const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
+    const sheet = ss.getSheetByName(CONFIG.SHEET_STATE);
+    const data = sheet.getDataRange().getValues();
+    const columns = getColumnIndexMap(data[0] || []);
 
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(locId)) {
-      const currentQty = Number(data[i][6]); // 5 to 6
-      const newQty = currentQty + Number(qtyToAdd);
-      sheet.getRange(i + 1, 7).setValue(newQty); // 6 to 7
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(locId)) {
+        if (!isActiveLocationRow(data[i], columns)) return { success: false, message: 'พิกัดนี้ไม่ได้เปิดใช้งาน' };
+        const currentQty = Number(data[i][6]) || 0;
+        const newQty = currentQty + addQty;
+        sheet.getRange(i + 1, 7).setValue(newQty);
 
-      logTransaction(userEmail, 'เติมเข้า (IN)', data[i][1], qtyToAdd, '-', data[i][15], 'เติมสต็อกเดิม'); // 14 to 15
-      return { success: true, remaining: newQty };
+        logTransaction(userEmail, 'เติมเข้า (IN)', data[i][1], addQty, '-', data[i][15], 'เติมสต็อกเดิม');
+        return { success: true, remaining: newQty };
+      }
     }
+    return { success: false, message: 'ไม่พบ ID พิกัดนี้' };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: false, message: 'ไม่พบ ID พิกัดนี้' };
 }
 
 function relocateStock(payload) {
   const {
     locId,
     qtyToMove,
-    newColStart,
-    rowStartNum,
-    newColEnd,
-    rowEndNum,
-    newLevels
+    destinationMode,
+    destinationLocId
   } = payload;
+  let newColStart = payload.newColStart;
+  let rowStartNum = payload.rowStartNum;
+  let newColEnd = payload.newColEnd;
+  let rowEndNum = payload.rowEndNum;
+  let newLevels = payload.newLevels;
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -418,6 +525,7 @@ function relocateStock(payload) {
     }
 
     const data = sheet.getDataRange().getValues();
+    const columns = getColumnIndexMap(data[0] || []);
 
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]).trim() !== String(locId).trim()) {
@@ -425,6 +533,9 @@ function relocateStock(payload) {
       }
 
       const sheetRow = i + 1;
+      if (!isActiveLocationRow(data[i], columns)) {
+        return { success: false, message: 'พิกัดต้นทางไม่อยู่ในสถานะใช้งาน' };
+      }
 
       const currentQty = Number(data[i][6]) || 0;
       const moveQty = Number(qtyToMove);
@@ -450,8 +561,33 @@ function relocateStock(payload) {
       const brand = data[i][5];
       const oldLocDisplay = data[i][15];
 
-      const colStart = String(newColStart || '').trim().toUpperCase();
-      const colEnd = String(newColEnd || '').trim().toUpperCase();
+      let colStart = String(newColStart || '').trim().toUpperCase();
+      let colEnd = String(newColEnd || '').trim().toUpperCase();
+      let destinationRowIndex = -1;
+
+      if (destinationMode === 'existing') {
+        destinationRowIndex = data.findIndex((row, index) =>
+          index > 0 &&
+          String(row[0]).trim() === String(destinationLocId || '').trim() &&
+          isActiveLocationRow(row, columns)
+        );
+        if (destinationRowIndex < 1) {
+          return { success: false, message: 'ไม่พบพิกัดปลายทางที่เลือก' };
+        }
+        colStart = String(data[destinationRowIndex][7] || '').trim().toUpperCase();
+        colEnd = String(data[destinationRowIndex][8] || '').trim().toUpperCase();
+        rowStartNum = data[destinationRowIndex][11];
+        rowEndNum = data[destinationRowIndex][12];
+        newLevels = [];
+        for (let level = Number(data[destinationRowIndex][13]) || 1; level <= (Number(data[destinationRowIndex][14]) || 1); level++) {
+          newLevels.push(level);
+        }
+      } else if (destinationMode === 'same-coordinate') {
+        colStart = String(data[i][7] || '').trim().toUpperCase();
+        colEnd = String(data[i][8] || '').trim().toUpperCase();
+        rowStartNum = data[i][11];
+        rowEndNum = data[i][12];
+      }
 
       const colStartNum = colLetterToNum(colStart);
       const colEndNum = colLetterToNum(colEnd);
@@ -478,11 +614,17 @@ function relocateStock(payload) {
       );
 
       const isFullMove = moveQty === currentQty;
+      const destinationIsSource = colStart === String(data[i][7] || '').trim().toUpperCase() &&
+        colEnd === String(data[i][8] || '').trim().toUpperCase() &&
+        rowMin === Number(data[i][11]) && rowMax === Number(data[i][12]) &&
+        clusters.length === 1 && clusters[0].min === Number(data[i][13]) && clusters[0].max === Number(data[i][14]);
+      if (destinationIsSource) {
+        return { success: false, message: 'พิกัดปลายทางต้องไม่ใช่พิกัดเดียวกับต้นทาง' };
+      }
 
-      // If only part of the stock moves,
-      // keep the original row at its original location.
-      if (!isFullMove) {
-        sheet.getRange(sheetRow, 7).setValue(currentQty - moveQty);
+      sheet.getRange(sheetRow, 7).setValue(currentQty - moveQty);
+      if (isFullMove) {
+        setLocationLifecycle(sheet, sheetRow, LOCATION_STATUS.INACTIVE_EMPTY, userEmail, 'ย้ายสินค้าออกทั้งหมด');
       }
 
       const newLocIds = [];
@@ -501,6 +643,8 @@ function relocateStock(payload) {
           remainingMoveQty -= clusterQty;
         }
 
+        if (clusterQty <= 0) return;
+
         const displayLevel =
           cluster.min === cluster.max
             ? `ชั้น ${cluster.min}`
@@ -509,22 +653,21 @@ function relocateStock(payload) {
         const displayLoc =
           `${colStart}${rowMin}:${colEnd}${rowMax} (${displayLevel})`;
 
-        // For a full move, preserve the original UUID on the first cluster.
-        if (isFullMove && index === 0) {
-          sheet.getRange(sheetRow, 7, 1, 10).setValues([[
-            clusterQty,   // G: QTY
-            colStart,     // H: COL_START
-            colEnd,       // I: COL_END
-            colMin,       // J: COL_START_NUM
-            colMax,       // K: COL_END_NUM
-            rowMin,       // L: ROW_START
-            rowMax,       // M: ROW_END
-            cluster.min,  // N: MIN_LEVEL
-            cluster.max,  // O: MAX_LEVEL
-            displayLoc    // P: DISPLAY_LOC
-          ]]);
+        const mergeIndex = data.findIndex((row, rowIndex) =>
+          rowIndex > 0 && rowIndex !== i &&
+          isActiveLocationRow(row, columns) &&
+          String(row[1] || '').trim() === String(sku).trim() &&
+          String(row[3] || '').trim() === String(lotNo || '').trim() &&
+          String(row[7] || '').trim().toUpperCase() === colStart &&
+          String(row[8] || '').trim().toUpperCase() === colEnd &&
+          Number(row[11]) === rowMin && Number(row[12]) === rowMax &&
+          Number(row[13]) === cluster.min && Number(row[14]) === cluster.max
+        );
 
-          newLocIds.push(String(locId));
+        if (mergeIndex > 0) {
+          const mergedQty = (Number(data[mergeIndex][6]) || 0) + clusterQty;
+          sheet.getRange(mergeIndex + 1, 7).setValue(mergedQty);
+          newLocIds.push(String(data[mergeIndex][0]));
           return;
         }
 
@@ -550,7 +693,7 @@ function relocateStock(payload) {
           displayLoc
         ];
 
-        appendRowAtRealLastRow(sheet, rowData);
+        appendActiveLocationRow(sheet, rowData, userEmail);
         newLocIds.push(newLocId);
       });
 
@@ -564,7 +707,7 @@ function relocateStock(payload) {
         0,
         oldLocDisplay,
         newLocSummary,
-        `ย้ายจาก locId ${locId}`
+        `${isFullMove ? 'ย้ายทั้งหมด' : 'ย้ายบางส่วน'} ${moveQty} หน่วย จาก locId ${locId}`
       );
 
       return {
@@ -584,6 +727,43 @@ function relocateStock(payload) {
       success: false,
       message: error.toString()
     };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function closeLocation(payload) {
+  const locId = String(payload.locId || '').trim();
+  const mode = String(payload.mode || '').trim();
+  const reason = String(payload.reason || '').trim();
+  const userEmail = getCurrentUserEmail();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
+    const sheet = ss.getSheetByName(CONFIG.SHEET_STATE);
+    if (!sheet) return { success: false, message: 'ไม่พบชีตตำแหน่งสินค้า' };
+
+    const data = sheet.getDataRange().getValues();
+    const columns = getColumnIndexMap(data[0] || []);
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() !== locId) continue;
+
+      const qty = Number(data[i][6]) || 0;
+      if (mode === 'empty' && qty !== 0) {
+        return { success: false, message: 'พิกัดนี้ยังมีสินค้า กรุณาย้ายทั้งหมดหรือทำเครื่องหมายตรวจสอบ' };
+      }
+      if (mode === 'cleanup' && !reason) {
+        return { success: false, message: 'กรุณาระบุเหตุผลที่ปิดพิกัด' };
+      }
+
+      const status = qty === 0 ? LOCATION_STATUS.INACTIVE_EMPTY : LOCATION_STATUS.CLEANUP_REQUIRED;
+      setLocationLifecycle(sheet, i + 1, status, userEmail, reason || 'ปิดพิกัดว่าง');
+      logTransaction(userEmail, 'ปิดพิกัด (CLOSE)', data[i][1], 0, data[i][15], '-', `${status}: ${reason || 'ปิดพิกัดว่าง'}`);
+      return { success: true, status: status, preservedQty: qty };
+    }
+    return { success: false, message: 'ไม่พบ ID พิกัดนี้' };
   } finally {
     lock.releaseLock();
   }
@@ -671,7 +851,9 @@ function apiLookupStock(targetSku) {
   const locations = [];
   if (stateSheet) {
     const stateData = stateSheet.getDataRange().getValues();
+    const stateColumns = getColumnIndexMap(stateData[0] || []);
     for (let i = 1; i < stateData.length; i++) {
+      if (!isActiveLocationRow(stateData[i], stateColumns)) continue;
       if (String(stateData[i][1]).trim() === targetSku) {
         locations.push({
           locId: String(stateData[i][0]),
@@ -701,6 +883,7 @@ function apiLookupByLot(targetInput) {
   const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
   const lotSheet = ss.getSheetByName(CONFIG.SHEET_LOT);
   const stateSheet = ss.getSheetByName(CONFIG.SHEET_STATE);
+  const stockSheet = ss.getSheetByName(CONFIG.SHEET_STOCK);
   
   const searchKey = String(targetInput || '').trim();
   let resolvedProductCode = '';
@@ -708,6 +891,7 @@ function apiLookupByLot(targetInput) {
   let unit = 'ชิ้น';
   let type = 'ยางนอก';
   let brand = '-';
+  let productResolved = false;
   
   // Phase 1: Search Lot Sheet to translate Lot -> Product Code
   if (lotSheet && searchKey) {
@@ -718,6 +902,7 @@ function apiLookupByLot(targetInput) {
       
       // Match either Lot Number or direct Product Code
       if (rowLot === searchKey || rowCode === searchKey) {
+        productResolved = true;
         resolvedProductCode = rowCode;
         resolvedProductName = String(lotData[i][1] || '').trim();
         unit = String(lotData[i][2] || 'ชิ้น').trim();
@@ -734,10 +919,14 @@ function apiLookupByLot(targetInput) {
   }
   
   const locations = [];
+  let frontlineQty = 0;
+  let cleanupQty = 0;
+  let erpQty = 0;
   
   // Phase 2: Find ALL locations in State Sheet belonging to this Product Code
   if (stateSheet && resolvedProductCode) {
     const stateData = stateSheet.getDataRange().getDisplayValues(); 
+    const stateColumns = getColumnIndexMap(stateData[0] || []);
     for (let i = 1; i < stateData.length; i++) {
       const rowSku = String(stateData[i][1] || '').trim();  // Col B: SKU_ID / Product Code
       const rowLot = String(stateData[i][3] || '').trim();  // Col D: LOT_NO
@@ -748,39 +937,76 @@ function apiLookupByLot(targetInput) {
                       (searchKey !== '' && rowLot === searchKey);
 
       if (isMatch) {
+        productResolved = true;
         if (!resolvedProductName && rowName) {
           resolvedProductName = rowName;
         }
 
+        const rowQty = Number(stateData[i][6]) || 0;
+        const rowStatus = getLocationStatus(stateData[i], stateColumns);
+        if (rowStatus === LOCATION_STATUS.CLEANUP_REQUIRED) cleanupQty += rowQty;
+        if (rowStatus !== LOCATION_STATUS.ACTIVE) continue;
+
+        frontlineQty += rowQty;
         locations.push({
           locId: String(stateData[i][0] || ''),
           lotNo: rowLot,                                 // Return Col D lot (blank or filled)
           code: String(stateData[i][15] || '-'),         // Col P: DISPLAY_LOC
-          qty: Number(stateData[i][6]) || 0,             // Col G: QTY
-          unit: unit
+          qty: rowQty,                                   // Col G: QTY
+          unit: unit,
+          displayLoc: String(stateData[i][15] || '-'),
+          colNameStart: String(stateData[i][7] || ''),
+          colNameEnd: String(stateData[i][8] || ''),
+          rowStart: Number(stateData[i][11]) || 0,
+          rowEnd: Number(stateData[i][12]) || 0,
+          minLvl: Number(stateData[i][13]) || 1,
+          maxLvl: Number(stateData[i][14]) || 1
         });
       }
     }
   }
+
+  if (stockSheet && resolvedProductCode) {
+    const stockData = stockSheet.getDataRange().getDisplayValues();
+    for (let i = CONFIG.STOCK_HEADER_ROW; i < stockData.length; i++) {
+      if (String(stockData[i][0] || '').trim() === resolvedProductCode) {
+        productResolved = true;
+        erpQty += Number(String(stockData[i][2] || '0').replace(/,/g, '')) || 0;
+        if (!resolvedProductName) resolvedProductName = String(stockData[i][1] || '').trim();
+        unit = String(stockData[i][4] || unit).trim();
+        brand = String(stockData[i][5] || brand).trim();
+        type = String(stockData[i][6] || type).trim();
+      }
+    }
+  }
+
+  const difference = frontlineQty - erpQty;
   
   return {
     success: true,
     data: {
       lot: searchKey,
-      productCode: resolvedProductCode || '-',
+      productCode: productResolved ? resolvedProductCode : '-',
       productName: resolvedProductName || 'ไม่พบสินค้าในระบบ',
       type: type,
       brand: brand,
       unit: unit,
-      locations: locations // Returns all matching locations
+      locations: locations,
+      reconciliation: {
+        frontlineQty: frontlineQty,
+        erpQty: erpQty,
+        cleanupQty: cleanupQty,
+        difference: difference,
+        status: difference === 0 ? 'EQUAL' : (difference < 0 ? 'UNDER' : 'OVER')
+      }
     }
   };
 }
 
 function updateLocationLot(locId, newLot) {
   const cleanLot = String(newLot || '').trim();
-  if (cleanLot.length > 7) {
-    return { success: false, message: 'Lot Number ต้องมีความยาวไม่เกิน 7 หลัก' };
+  if (cleanLot && !/^\d{1,20}$/.test(cleanLot)) {
+    return { success: false, message: 'Lot Number ต้องเป็นตัวเลขไม่เกิน 20 หลัก' };
   }
 
   const userEmail = getCurrentUserEmail();
@@ -830,6 +1056,10 @@ function doPost(e) {
     let result;
 
     switch (payload.action) {
+      case 'authCheck':
+        result = { success: true, email: userEmail };
+        break;
+
       case 'lookup':
         result = apiLookupByLot(payload.lot || payload.sku);
         break;
@@ -844,6 +1074,10 @@ function doPost(e) {
 
       case 'relocate':
         result = relocateStock(payload);
+        break;
+
+      case 'closeLocation':
+        result = closeLocation(payload);
         break;
 
       case 'updateLot':

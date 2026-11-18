@@ -524,8 +524,11 @@ function openRelocateModal(locId, sku, currentQty, unitText) {
   if (!modal) return;
   modal.style.display = 'flex';
   document.getElementById('relocate-loc-id').value = locId;
-  currentRelocateSku = String(sku || '').trim();
+  const sourceItem = masterStaffItems.find(item => String(item.locId) === String(locId));
+  currentRelocateSku = String(sourceItem?.sku || sku || '').trim();
   document.getElementById('relocate-sku-title').innerText = `${sku} · คงเหลือ ${currentQty} ${unitText}`;
+  const destinationLabel = document.getElementById('relocate-destination-label');
+  if (destinationLabel) destinationLabel.textContent = `เลือกเฉพาะพิกัดของ SKU ${currentRelocateSku}`;
   document.getElementById('relocate-qty').value = currentQty;
   document.getElementById('relocate-qty').setAttribute('max', currentQty);
   populateRelocateDestinations(locId);
@@ -549,10 +552,12 @@ function switchRelocateMode(mode) {
 }
 
 function getDestinationOptions(sourceLocId, sourceSku) {
+  const sourceItem = masterStaffItems.find(item => String(item.locId) === String(sourceLocId));
+  const productCode = String(sourceItem?.sku || sourceSku || '').trim().toUpperCase();
   const unique = new Map();
   masterStaffItems.forEach(item => {
     if (String(item.locId) === String(sourceLocId)) return;
-    if (String(item.sku || '').trim() !== String(sourceSku || '').trim()) return;
+    if (String(item.sku || '').trim().toUpperCase() !== productCode) return;
     const key = [item.colNameStart, item.rowStart, item.colNameEnd, item.rowEnd, item.minLvl, item.maxLvl].join('|');
     if (!unique.has(key)) unique.set(key, item);
   });

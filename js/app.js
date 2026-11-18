@@ -356,7 +356,12 @@ async function handleStockAction(actionType, locId, sku, unit, maxQty = 0) {
 async function promptEditLot(locId, sku, currentLot) {
   const isDark = currentTheme === 'dark';
   const displayedLot = String(document.getElementById('result-lot')?.textContent || '').trim();
-  const justScannedLot = currentView === 'scanner' && lastScannedLot === displayedLot ? lastScannedLot : '';
+  // The visible scanner result is the source of truth. Keeping this tied to an
+  // in-memory camera callback was too strict and skipped the choice dialog on
+  // some mobile scanner flows.
+  const justScannedLot = currentView === 'scanner' && /^\d{1,20}$/.test(displayedLot)
+    ? displayedLot
+    : '';
   let newLot;
 
   if (justScannedLot) {
@@ -884,7 +889,6 @@ const manualLotStatus = document.getElementById('manual-lot-status');
 
 let running = false;
 let primaryScanner = null;
-let lastScannedLot = '';
 const LOT_PATTERN = /^\d{7}$/;
 
 function switchPrimaryInputMode(mode) {
@@ -917,7 +921,6 @@ function lookupManualLot() {
   }
 
   if (resultLotEl) resultLotEl.textContent = lotCode;
-  lastScannedLot = '';
   if (manualLotStatus) manualLotStatus.textContent = `กำลังค้นหา Lot: ${lotCode}`;
   handleScannerLookup(lotCode);
 }
@@ -928,7 +931,6 @@ function processRawScan(code, format) {
 
 function onCodeConfirmed(code, format) {
   stopScanner();
-  lastScannedLot = code;
   if (resultLotEl) resultLotEl.textContent = code;
   if (statusEl) statusEl.textContent = 'ยืนยันรหัสสำเร็จ!';
   if (navigator.vibrate) navigator.vibrate(100);

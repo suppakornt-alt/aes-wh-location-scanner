@@ -178,6 +178,9 @@ read the relevant project documents when present:
 - `docs/UI_DESIGN.md`: screens, navigation, device behavior, and language.
 - `docs/TEST_PLAN.md`: release scenarios and acceptance criteria.
 - `docs/DECISIONS.md`: important architecture decisions and reasons.
+- `docs/OFFICE_WAREHOUSE.md`: approved `ออฟฟิศโกดัง` ORD allocation workflow.
+- `docs/NEXT_MIGRATION.md`: future work that is not approved for coding yet.
+- `docs/AGENT_BLUEPRINT.md`: documentation checklist for future sessions.
 
 Keep those documents synchronized with implementation changes. A daily log is
 project history, not a replacement for active instructions.

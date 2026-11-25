@@ -2,20 +2,24 @@
 
 ## Status
 
-This is the approved next implementation scope for the `ออฟฟิศโกดัง` page.
-The requirements are documented before code changes. The current office page
-and office JavaScript remain unchanged until implementation begins.
+This is the approved first-version scope for the `ออฟฟิศโกดัง` page. The
+requirements were agreed with the project owner on 2026-11-26. Code changes
+start only after the owner gives the signal to plan and implement.
 
 ## Purpose
 
-Replace the current office test-mode picking form with a workflow where the
-warehouse administrator chooses the physical location from which each ORD line
-will be picked. The backend then records the allocation and deducts the picked
-quantity from the current location data.
+Replace the current office test-mode Lot form with a workflow where the
+warehouse administrator chooses the physical location from which each SKU of an
+ORD will be picked. After a four-hour cancellation hold, the backend deducts
+the chosen quantities from the location sheet automatically.
 
 The administrator chooses locations. The backend remains responsible for
 identity, authorization, quantity validation, concurrency protection, stock
 deduction, and auditability.
+
+The location web app is a location-finding aid for workers, not the stock
+authority. ERP remains the authoritative stock source. The office workflow
+therefore keeps the location data close to reality; it does not reserve stock.
 
 ## Current operational boundary
 
@@ -24,194 +28,197 @@ boundary remains:
 
 1. Download the ORD raw file from Magic 2002 ERP.
 2. Put the file in the company shared drive.
-3. Allow the existing two-hour Apps Script cleaning cycle to process it.
+3. The existing two-hour cleaning cycle and import range refresh
+   `DATA : Current ORD`. The sheet is overwritten daily.
 4. Open the `ออฟฟิศโกดัง` page and allocate locations.
 
 The import source, cleaning process, and raw-file storage location must not be
-silently redesigned as part of the office-page implementation.
+redesigned as part of the office-page implementation.
 
-## Logical data model
+## Data sources
 
-The following tables describe the required information. Actual sheet names,
-header rows, and final header spelling must be confirmed before coding.
-
-### Current location/state data
-
-This is the existing current-state inventory by location. The current project
-documentation identifies `MAIN : ตำแหน่งสินค้าทั้งหมด` as the location source.
-
-| Logical field | Current documented field | Purpose |
+| Sheet | Role | Written by this workflow |
 | --- | --- | --- |
-| `location_id` | `LOCATION_ID` | Authoritative location-record identifier. |
-| `product_code` | `SKU_ID` | Product associated with the location. |
-| `location` | `DISPLAY_LOC` plus coordinate fields | Worker-facing location display. |
-| `amount` | `QTY` | Current quantity available at the location. |
+| `DATA : Current ORD` | Input ORD lines. Header row 6, data from row 7. | Never. |
+| `MAIN : ตำแหน่งสินค้าทั้งหมด` | Location choices and the stock that is deducted. | Yes: add location, add quantity, timed deduction. |
+| `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` | One row per ORD, keyed by `ord_id`, overwritten on status change. Source of truth for which ORDs are done. | Yes. |
+| `MAIN : Log พิกัดจาก ORD` | One row per location chosen for an ORD. | Yes. |
+| `MAIN : Log ข้อมูลตำแหน่ง` | Existing quantity audit log. | Yes, when stock is actually deducted. |
 
-This mapping is a working requirement and must be verified against the live
-sheet before implementation. `location_id`, not the display text, is the
-authoritative reference used for deduction.
+Column details are in `docs/DATA_MODEL.md`.
 
-### Raw ORD data
+## ORD lines and duplicate products
 
-The cleaned ORD output must provide at least:
+`DATA : Current ORD` can contain the same `product_code` more than once in one
+ORD (for example a paid line and a free line). In the first version, the
+backend merges rows with the same `ord_id + product_code` into one SKU
+requirement by summing `quantity`.
 
-| Field | Purpose |
-| --- | --- |
-| `ord_id` | ORD document identifier. |
-| `product_code` | SKU required by the ORD. |
-| `amount` | Quantity that must be allocated for the ORD line. |
+Example: `ORD261002004` contains `MI16P-0003` twice with quantity 2 each. The
+office page shows one card, `MI16P-0003 · 4 วง`.
 
-The office list is expected to display the ORD date, ORD number, product code,
-product name, amount, and current allocation status when those values are
-available from the cleaned source.
-
-Each raw line must have a stable line identity. `ord_id + product_code` must not
-be assumed to be unique if the ERP can export the same product more than once
-in one ORD. A source line number or another stable `ord_line_id` is required
-before duplicate handling is implemented.
-
-### ORD location allocation data
-
-The allocation table records the administrator's physical picking decision.
-There is one row for each location used.
-
-| Field | Purpose |
-| --- | --- |
-| `allocation_id` | Unique allocation record or commit reference. |
-| `ord_line_id` | Stable reference to the raw ORD line. |
-| `ord_id` | ORD document identifier for reporting. |
-| `product_code` | SKU being picked. |
-| `location_id` | Authoritative source location. |
-| `location` | Display snapshot of the selected location. |
-| `pull_off_amount` | Quantity picked from this location. |
-| `created_at` | Allocation creation time. |
-| `created_by` | Authenticated user who confirmed the allocation. |
-| `status` | Allocation lifecycle value, if the implementation needs one. |
-
-Example: if 10 units of one SKU are picked as 6 units from location A and 4
-units from location B, the table contains two allocation rows. The UI may show
-one SKU card with two location entries, but the saved data must preserve the
-separate location quantities.
-
-Every committed allocation must also leave an audit event. The implementation
-may use the existing `MAIN : Log ข้อมูลตำแหน่ง` sheet, a dedicated stock-movement
-table, or both, but the chosen design must preserve the ORD and allocation
-reference for later investigation.
+The page does not label free goods. Money fields are not used by this workflow.
 
 ## Office workflow
 
-### Pending ORD list
+### 1. Pending ORD list
 
-The page shows pending work in a mobile-friendly table or card list with:
+The page lists ORDs from `DATA : Current ORD` that are available for
+allocation. An ORD is available when `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` has
+no row for its `ord_id`, or its row is `CANCELED`. A `CANCELED` ORD returns to
+the list.
 
-- ORD date, when available
-- ORD number
-- product code
-- product name
-- required amount
-- allocation status
-- an action button such as `เบิกรายการ`
+Each ORD shows `order_date`, `ord_id`, `customer`, the number of SKUs, and a
+`เบิกรายการ` action.
 
-Only records that are still eligible for allocation should offer the picking
-action. Completed records must not be silently processed again. When the
-administrator opens an ORD, the allocation screen must make it clear whether
-the action covers the full ORD or one individual line. The intended workflow
-is to open the full ORD, complete every SKU line, and confirm once.
+### 2. Location allocation screen
 
-### Location allocation screen
+The admin opens one full ORD. Each merged SKU card shows:
 
-For each ORD line, the administrator sees:
+- product code, product name, unit;
+- required quantity, allocated quantity, remaining quantity;
+- one or more location rows, each with a location selector and a quantity to
+  pick from that location;
+- `+` to add another location row when the SKU is split across locations.
 
-- required amount
-- total amount currently allocated in the form
-- remaining amount
-- one or more location rows
-- a location selector
-- available quantity at the selected location
-- quantity to pick from that location
-- a `+` action to add another location when one SKU is split across locations
+Location choices come from `MAIN : ตำแหน่งสินค้าทั้งหมด` and include only rows
+where `SKU_ID` equals the product code, `LOCATION_STATUS` is `ACTIVE` (or
+blank), and `QTY > 0`. Each choice shows `DISPLAY_LOC`, `LOT_NO`, and `QTY`.
+`LOCATION_ID` is the submitted value; display text is never used to deduct.
 
-Location choices must be loaded from current state data and filtered to the
-selected product code. The UI must not accept arbitrary free-text locations in
-place of a valid `location_id`.
+The same location may not appear twice in one SKU card.
 
-The UI must prevent duplicate location rows for the same SKU or combine them
-before submission. The server must still validate the final payload.
+### 3. Fixing location data from the office page
 
-### Confirmation
+The location web app may not match the real warehouse. The admin must make it
+match before choosing a location:
 
-The stock-changing action requires an explicit final confirmation, such as
-`ยืนยันการเบิก`. A draft feature may be added later, but saving a draft must
-not deduct stock.
+- **Add new location:** when the real location is not in the selector, the
+  admin uses a button on the SKU card. It opens the same new-location form that
+  the picker page uses (existing `assign` action).
+- **Add quantity:** when a location shows less than what is really there, the
+  admin adds quantity to that location first (existing `add` action).
 
-On successful confirmation, the page shows the committed result and refreshes
-the remaining work list. On failure, it shows the reason and leaves current
-state and allocation data unchanged.
+After either action, the location choices for that SKU reload. The ORD being
+allocated stays on screen with the admin's entries kept.
+
+### 4. Submit
+
+The admin can submit only when, for every SKU in the ORD:
+
+- the allocated total equals the required quantity; and
+- every row's quantity is a positive number and does not exceed the selected
+  location's current `QTY`.
+
+The final action is `ยืนยันการเบิก`. Submitting does **not** deduct stock. It
+saves the ORD as `PENDING` and the ORD leaves the pending list.
+
+There is no draft feature in the first version.
+
+### 5. Four-hour hold and cancel
+
+A `PENDING` ORD waits four hours from submission before stock is deducted, in
+case the customer cancels.
+
+- The page shows a list of `PENDING` ORDs with their submit time.
+- Any authorized user may cancel a `PENDING` ORD. It becomes `CANCELED`, no
+  stock changes, and the ORD returns to the pending list to be redone.
+- A `PENDING` ORD cannot be edited. To change it, cancel and redo it.
+
+### 6. Automatic deduction
+
+A time-driven Apps Script trigger runs every 15 minutes. For each `PENDING`
+ORD submitted at least four hours earlier, it deducts every chosen location and
+marks the ORD `COMPLETED`. Stock is therefore deducted between 4 hours and
+4 hours 15 minutes after submission.
+
+After `COMPLETED`, the office page offers no undo. If a customer cancels later,
+staff restore stock manually with the normal add-quantity action.
 
 ## Backend rules
 
-Before committing one ORD allocation, covering all required SKU lines in the
-submitted ORD:
+### Loading
 
-1. Re-read the current state rows on the server.
-2. Verify the authenticated user and authorization.
-3. Verify that every selected `location_id` exists and belongs to the selected
-   product code.
-4. Verify that every selected quantity is numeric and greater than zero.
-5. Verify that no selected quantity exceeds the latest available location
-   quantity.
-6. Verify that the sum of allocations equals the required ORD amount before
-   marking the line complete.
-7. Acquire `LockService` before the final read-check-write operation.
-8. Write the allocation and audit records, then deduct the current quantities.
-9. Mark the ORD line completed only after the stock-changing operation succeeds.
+- Read `DATA : Current ORD` by header name from row 6.
+- Merge rows by `ord_id + product_code`.
+- Exclude ORDs with a `PENDING` or `COMPLETED` status entry.
 
-The operation must be all-or-nothing for the submitted ORD commit. If any SKU
-or location fails validation, the backend must not partially deduct the ORD.
+### Submit (`ยืนยันการเบิก`)
 
-The request must be safe against double-clicks and uncertain network retries.
-Use a stable commit or idempotency reference so repeating the same confirmed
-request cannot deduct the same stock twice.
+Under `LockService`, as one operation:
 
-## Quantity and status behavior
+1. Verify the session token and authorization.
+2. Re-read the ORD from `DATA : Current ORD` and merge it again. If its SKUs or
+   required quantities differ from the submitted ORD, reject with
+   `ORD นี้มีการเปลี่ยนแปลง กรุณาโหลดใหม่`.
+3. Reject if the ORD's status row is `PENDING` or `COMPLETED`. This also makes
+   double-clicks and network retries safe without an extra ID.
+4. Re-read the location sheet. Every chosen `LOCATION_ID` must exist, be
+   `ACTIVE`, match the product code, and hold at least the chosen quantity.
+5. Every SKU's allocated total must equal its required quantity.
+6. Append all allocation rows in one batch with the same `timestamp`. Then
+   append the ORD's status row, or overwrite its `CANCELED` row, with
+   `PENDING`, that `timestamp`, and the submitter as `user`.
 
-- A positive exact allocation completes the ORD line.
-- An under-allocation remains incomplete and must be visible to the admin.
-- An over-allocation is rejected.
-- Insufficient current stock is rejected unless a future approved partial-pick
-  rule explicitly allows it.
-- A completed ORD line cannot be submitted again as a new deduction.
-- Corrections must use a controlled reversal or adjustment that preserves the
-  original allocation and audit history; do not silently overwrite history.
-- The office allocation status is separate from location lifecycle statuses
-  such as `ACTIVE` and `INACTIVE_EMPTY`.
+Any failed check writes nothing.
 
-Initial status names may be `PENDING`, `DRAFT`, `COMPLETED`, and `EXCEPTION`,
-but the final set must be confirmed before implementation.
+### Cancel
+
+Under `LockService`: only a `PENDING` ORD can be canceled. Overwrite `status`
+with `CANCELED` and `user` with the canceling user. No stock change. The cancel
+time is not stored.
+
+### Timed deduction
+
+Under `LockService`, for each due `PENDING` ORD:
+
+1. Read the allocation rows whose `ord_id` and `timestamp` match the ORD's
+   status row. Rows from earlier canceled submissions are ignored.
+2. For each row, find the location by `LOCATION_ID` and deduct the chosen
+   quantity. If the location now holds less (workers may have picked from it
+   during the hold), deduct down to 0 and record the shortfall.
+3. A location that reaches 0 becomes `INACTIVE_EMPTY`. The row is never
+   deleted.
+4. Append one row per deducted location to `MAIN : Log ข้อมูลตำแหน่ง`. The user
+   is the status row's `user` (the submitter). The reference contains the
+   `ord_id`, `AUTO`, and any shortfall.
+5. Overwrite the ORD's `status` with `COMPLETED`. `timestamp` and `user` stay.
+
+A missing or inactive location is treated as a full shortfall, so the ORD still
+completes and the problem appears in the log for cleaning.
+
+Because the timed deduction uses the saved allocation rows, it does not depend
+on `DATA : Current ORD` still containing the ORD.
+
+## Status values
+
+```text
+PENDING    submitted, waiting for the four-hour hold; no stock deducted
+COMPLETED  stock deducted by the timed trigger
+CANCELED   canceled during the hold; ORD can be allocated again
+```
+
+These are separate from location lifecycle statuses such as `ACTIVE` and
+`INACTIVE_EMPTY`.
 
 ## Authentication and language
 
 - Reuse the existing one-time Google authentication session.
-- Do not add a second login screen to the office page.
-- Apps Script must silently revalidate the ID token for every protected request.
+- Do not add a second login screen or role checks to the office page.
+- Apps Script silently revalidates the ID token for every protected request.
+- The timed trigger runs as the script owner and needs no ID token.
 - Source identifiers and action names remain English.
 - Worker-facing labels, validation, and status messages are Thai-first.
+- Keep the existing visual theme of the office and picker pages.
 
-## Non-goals for this implementation
+## Non-goals for this version
 
 - Direct ERP API integration.
-- Replacing the two-hour raw-data cleaning process.
+- Replacing the import range or cleaning cycle.
+- Stock reservation between `PENDING` ORDs.
+- Draft saving.
+- Editing a `PENDING` ORD, or undoing a `COMPLETED` ORD from the office page.
+- Labelling free-goods lines.
+- Role-based permissions.
 - Changes to picker, 3D, reconciliation, or relocation behavior.
 - Automatic location selection or route optimization.
-- A new authentication or supervisor system before those rules are approved.
-
-## Decisions required before coding
-
-- Confirm the actual State sheet and map its live headers to the logical fields.
-- Confirm the raw ORD sheet name, header row, and stable line identifier.
-- Confirm the allocation-table destination and exact headers.
-- Confirm whether insufficient stock blocks the ORD or permits an explicit
-  partial allocation.
-- Confirm whether the first version needs draft saving or only final confirmation.
-- Confirm who may reverse or correct a completed allocation.
-- Confirm the final office allocation status values.

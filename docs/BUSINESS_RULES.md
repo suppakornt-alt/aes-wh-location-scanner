@@ -117,29 +117,35 @@ SKU, quantity delta, source/destination locations, and a reference/reason.
 
 ## Office warehouse picking allocation
 
-The next implementation scope is the `ออฟฟิศโกดัง` workflow described in
-`docs/OFFICE_WAREHOUSE.md`.
+The approved next implementation is the `ออฟฟิศโกดัง` workflow. Full
+requirements are in `docs/OFFICE_WAREHOUSE.md`; the key rules are:
 
-- The cleaned ORD data is the input work list; the first version does not
-  download directly from the ERP.
-- The administrator selects locations for each ORD line. Location choices come
-  from current state data and must match the selected product code.
-- One SKU may be split across multiple locations. Each selected location is a
-  separate allocation record with its own `pull_off_amount`.
-- The intended confirmation boundary is the full ORD: every required SKU line
-  must be allocated before one final confirmation commits the ORD.
-- Quantities must be positive, and the final allocation total must equal the
-  required amount for every ORD line before the ORD is marked complete.
-- The backend must re-read state, acquire `LockService`, validate availability,
-  and perform the allocation/audit/deduction as one protected operation.
-- An invalid or insufficient-stock submission must make no quantity change.
-- Completed lines cannot be deducted again. Reversals or corrections must
-  preserve the original allocation and audit history.
-- Duplicate submissions and uncertain network retries must be safe through a
-  stable commit or idempotency reference.
-
-The exact physical Sheets, status names, partial-allocation rule, and correction
-permissions remain decisions to confirm before implementation.
+- Input is `DATA : Current ORD` (header row 6). The app never writes to it.
+- Rows with the same `ord_id + product_code` are merged into one SKU
+  requirement by summing `quantity`.
+- An ORD is hidden from the list while it has a `PENDING` or `COMPLETED` entry
+  in `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`. `CANCELED` returns it to the list.
+- The admin chooses locations, not Lots. Choices are `ACTIVE` rows with
+  `QTY > 0` and a matching `SKU_ID`. One SKU may be split across locations; each
+  location is one row in `MAIN : Log พิกัดจาก ORD`.
+- A chosen quantity must be positive and must not exceed the location's current
+  `QTY`. If the real location holds more, or is missing, the admin first fixes
+  the location data from the office page (`add` or `assign`).
+- The whole ORD is submitted at once. Every SKU must be allocated exactly.
+  Submit writes all rows in one batch under `LockService`, or writes nothing.
+- Submit does not deduct stock. The ORD becomes `PENDING` for four hours.
+- Any authorized user can cancel a `PENDING` ORD (`CANCELED`, no stock change).
+  A `PENDING` ORD cannot be edited; cancel and redo it.
+- A time-driven trigger runs every 15 minutes and deducts ORDs that have been
+  `PENDING` for at least four hours, then marks them `COMPLETED`.
+- If a location holds less than the chosen quantity at deduction time, it is
+  deducted to 0 and the shortfall is logged. A location at 0 becomes
+  `INACTIVE_EMPTY`.
+- A repeated submit for an ORD that is already `PENDING` or `COMPLETED` is
+  rejected, which makes double-clicks and network retries safe.
+- There is no undo after `COMPLETED`. Staff restore stock with the normal `add`
+  action.
+- No extra roles: every authorized user can use the office workflow.
 
 ## Current API actions
 
@@ -159,6 +165,13 @@ getOps
 audit
 ```
 
+`assign` creates a new location row and is logged as `รับเข้า (RECEIVE)`.
+
+The office workflow will add actions for loading pending ORDs, loading location
+choices, submitting, listing `PENDING` ORDs, and canceling. Their final names
+are set during implementation. The timed deduction is a trigger, not an API
+action.
+
 The planned consignment registry will use the same authentication model but its
 business rules have not yet been defined here.
 
@@ -166,6 +179,7 @@ business rules have not yet been defined here.
 
 - Cleanup recovery back to `ACTIVE` is not implemented.
 - Supervisor/admin action boundaries are not implemented as separate roles.
-- The office page's final backend save workflow is still pending in the code.
+- The office page is still the old test-mode Lot form until the `ออฟฟิศโกดัง`
+  workflow is implemented.
 - Client-request idempotency for uncertain network retries is not yet defined
   for every quantity operation.

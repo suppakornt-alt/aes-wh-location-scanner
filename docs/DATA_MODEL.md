@@ -17,14 +17,19 @@ MAIN : ตำแหน่งสินค้าทั้งหมด
     SKU_ID + LOT_NO + physical coordinate -> frontline location quantity
 
 MAIN : Log ข้อมูลตำแหน่ง
-    audit trail for pick, add, relocate, close, receive, and Lot edits
+    audit trail for pick, add, relocate, close, receive (new location via
+    the `assign` action), Lot edits, and timed office ORD deductions
 
 DATA : Current ORD
     cleaned ORD lines waiting for office allocation
     product_code -> SKU_ID
 
-ORD location allocation data
-    one row per selected source location and picked quantity
+MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว
+    one row per submitted ORD and its status (PENDING / COMPLETED / CANCELED)
+
+MAIN : Log พิกัดจาก ORD
+    one row per location chosen for a submitted ORD
+    location_id -> LOCATION_ID
 ```
 
 The backend resolves a scanned or entered Lot through `DATA : Stock By Lot`,
@@ -171,10 +176,10 @@ location sheet remains the current-state source.
 
 ## Sheet: `DATA : Current ORD`
 
-Cleaned ORD lines produced by the existing two-hour Apps Script cleaning cycle
-from the Magic 2002 ERP raw export. This sheet is the input work list for the
-`ออฟฟิศโกดัง` allocation workflow. The office application reads it; it does not
-write to it, because the cleaning cycle may rewrite its contents.
+Cleaned ORD lines from the Magic 2002 ERP raw export, brought in through an
+import range from another file and overwritten daily. This sheet is the input
+work list for the `ออฟฟิศโกดัง` allocation workflow. The office application
+reads it and never writes to it.
 
 The header starts at physical row 6. Data starts at row 7, matching the other
 `DATA :` sheets.
@@ -205,10 +210,10 @@ order_total
 | `customer` | Customer on the ORD. | Display only. |
 | `product_code` | Required SKU; matches `SKU_ID` in the location sheet. | Filters location choices. |
 | `product_name` | Product name from the ERP export. | Display only. |
-| `quantity` | Required quantity for this ORD line (the logical `amount`). | Required total for allocation. |
+| `quantity` | Required quantity for this ORD line. | Summed per `ord_id + product_code`. |
 | `weight` | Line weight from the ERP export. Unit not yet confirmed. | Not used. |
 | `unit` | Unit of measure for `quantity`. | Display only. |
-| `line_amount_source` | Line value carried from the ERP export. Exact meaning to be confirmed. | Not used. |
+| `line_amount_source` | Line value from the ERP export. `0.00` usually means a free line, but not always. | Not used. |
 | `order_subtotal_before_vat` | ORD subtotal before VAT. Assumed to repeat on every line of the ORD; confirm. | Not used. |
 | `vat` | ORD VAT amount. Assumed ORD-level; confirm. | Not used. |
 | `order_total` | ORD total including VAT. Assumed ORD-level; confirm. | Not used. |
@@ -216,60 +221,98 @@ order_total
 Monetary and weight fields are retained from the source but are not part of the
 stock allocation rules. The allocation workflow must not modify them.
 
-### ORD line identity
+### Duplicate products in one ORD
 
-The sheet has no line-number column. `ord_id + product_code` is not proven
-unique: the ERP may export the same product more than once in one ORD (for
-example, at different prices). Until the owner confirms one of the following,
-duplicate handling cannot be implemented safely:
+The sheet has no line-number column, and one ORD can contain the same
+`product_code` more than once (for example a paid line and a free line with
+`line_amount_source` = `0.00`). The office workflow merges rows with the same
+`ord_id + product_code` into one SKU requirement by summing `quantity`. No line
+identifier is needed because the whole ORD is submitted at once.
 
-- the cleaning cycle guarantees one row per `ord_id + product_code`; or
-- the cleaning cycle adds a stable line identifier (for example `ord_line_no`);
-  or
-- duplicate product rows within one ORD are summed into one requirement.
+Example from a real ORD:
 
-Sheet row position must not be used as a line identifier, because the cleaning
-cycle can reorder or rewrite the sheet.
+```text
+ord_id        product_code  quantity  line_amount_source
+ORD261002004  MI16P-0003    2         0.00
+ORD261002004  MI16P-0003    2         3,800.00
+-> one requirement: ORD261002004 / MI16P-0003 / 4
+```
 
 ### Completion tracking
 
-`DATA : Current ORD` has no allocation-status column. Because the cleaning
-cycle owns this sheet, allocation status must be derived from the allocation
-data (or a separate status sheet), not written back into this sheet. An ORD
-that disappears from or reappears in a later cleaning run must not be deducted
-twice.
+`DATA : Current ORD` is overwritten daily, so no status is written to it. Which
+ORDs are done is decided only by `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`.
 
-## Office warehouse allocation data
+## Sheet: `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`
 
-The approved next office workflow is documented in
-`docs/OFFICE_WAREHOUSE.md`. It reads ORD lines from `DATA : Current ORD` and
-introduces an allocation data set that is not yet confirmed as a physical Sheet:
+New sheet. **One row per ORD, keyed by `ord_id`.** The row is overwritten when
+the status changes; status history is not kept. It is the source of truth for
+whether an ORD is still available for allocation:
 
-- allocation rows with `ord_line_id`, `ord_id`, `product_code`, `location_id`,
-  display `location`, and `pull_off_amount`.
+- `PENDING` or `COMPLETED`: hidden from the pending ORD list;
+- `CANCELED`, or no row: shown in the pending ORD list.
 
-Mapping from `DATA : Current ORD` to the logical ORD fields:
+Columns (approved 2026-11-26):
 
 ```text
-ord_id        <- ord_id
-product_code  <- product_code
-amount        <- quantity
-ord_line_id   <- UNKNOWN (see "ORD line identity")
+timestamp   submit time of the current submission; starts the four-hour hold
+ord_id      key; one row per ORD
+status      PENDING | COMPLETED | CANCELED
+user        submitting user; replaced by the canceling user on CANCELED
 ```
 
-One allocation row represents one selected source location. A single SKU may
-therefore produce multiple allocation rows. `location_id` is authoritative;
-the display location is not sufficient for a stock deduction.
+How each action changes the row:
 
-The existing `MAIN : ตำแหน่งสินค้าทั้งหมด` sheet is the documented current
-location source. The new workflow must verify the live mapping before coding:
-`LOCATION_ID` to `location_id`, `SKU_ID` to `product_code`, `DISPLAY_LOC` to
-`location`, and `QTY` to `amount`.
+| Action | `timestamp` | `status` | `user` |
+| --- | --- | --- | --- |
+| First submit | set to now | `PENDING` | submitter |
+| Cancel | unchanged | `CANCELED` | canceler |
+| Redo after cancel | set to now | `PENDING` | submitter |
+| Timed deduction | unchanged | `COMPLETED` | unchanged (submitter) |
 
-Every committed allocation must be auditable and must reference the ORD and
-allocation/commit identifier. The final choice between extending
-`MAIN : Log ข้อมูลตำแหน่ง` and adding a dedicated stock-movement table is still
-open.
+`timestamp` changes only on submit, so it always matches the `timestamp` of the
+allocation rows that belong to the current submission.
+
+## Sheet: `MAIN : Log พิกัดจาก ORD`
+
+New sheet. One row per location chosen for a submitted ORD. A SKU split across
+two locations produces two rows.
+
+Columns (approved 2026-11-26):
+
+```text
+timestamp      submit time; same value as the status row's timestamp
+ord_id
+product_code
+product_name
+location_id    LOCATION_ID; the only value used to deduct
+location       DISPLAY_LOC text for people
+amount         quantity to pick from this location
+```
+
+Rows are written in one batch at submit and are never edited or deleted. Rows
+from a canceled submission stay as history. The timed deduction uses only the
+rows whose `ord_id` and `timestamp` match the ORD's current `PENDING` row.
+
+## Office deduction and the existing audit log
+
+The timed deduction subtracts `amount` from `QTY` of the matching
+`LOCATION_ID` in `MAIN : ตำแหน่งสินค้าทั้งหมด`, down to a minimum of 0. Each
+deducted location appends one row to `MAIN : Log ข้อมูลตำแหน่ง`, with the
+status row's `user` (the submitter) as the user and a reference containing the
+`ord_id`, `AUTO`, and any shortfall.
+
+Location mapping used by the office workflow:
+
+```text
+location_id   <- LOCATION_ID
+product_code  <- SKU_ID
+location      <- DISPLAY_LOC
+available     <- QTY   (only ACTIVE/blank rows with QTY > 0)
+```
+
+The location selector also shows `LOT_NO`, but Lot is not saved in the
+allocation sheet; `location_id` already identifies it.
 
 ## Derived reconciliation
 
@@ -293,9 +336,5 @@ are shown separately and are not silently included in frontline quantity.
 - The recovery workflow from `CLEANUP_REQUIRED` back to `ACTIVE` is not yet
   defined.
 - No separate user/role sheet is currently documented for this internal app.
-- The stable ORD-line identifier for `DATA : Current ORD` is not yet confirmed.
 - Whether order-level money fields repeat on every ORD line, and the meaning of
-  `line_amount_source` and `weight`, are not yet confirmed.
-- How long ORD lines stay in `DATA : Current ORD` after allocation, and whether
-  the cleaning cycle removes completed ORDs, is not yet confirmed.
-- The physical allocation sheet name and headers are not yet confirmed.
+  `weight`, are not confirmed. They are not used by the office workflow.

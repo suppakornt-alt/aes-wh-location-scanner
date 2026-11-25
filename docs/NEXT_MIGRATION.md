@@ -10,20 +10,12 @@ data.
 Implement the approved `ออฟฟิศโกดัง` workflow from
 `docs/OFFICE_WAREHOUSE.md`.
 
-The implementation should:
+Requirements and sheet columns are agreed (DEC-016 to DEC-019). Ready for
+planning and implementation when the owner gives the signal.
 
-- consume the cleaned ORD work list;
-- show pending ORD lines to the warehouse administrator;
-- allow one SKU to be allocated across multiple current locations;
-- validate the latest location quantities under `LockService`;
-- write allocation and audit records; and
-- deduct the selected quantities from current location state without duplicate
-  submission or partial failure.
-
-The current office page and office JavaScript may be replaced as needed, while
-the shared authentication/session behavior remains intact. Confirm the live
-sheet names, headers, stable ORD-line identifier, statuses, and correction
-workflow before coding.
+Later improvements, not in the first version: draft saving, editing a
+`PENDING` ORD, undo after `COMPLETED`, free-goods labels, and stock reservation
+between `PENDING` ORDs.
 
 ## Priority 2 — Documented next module
 
@@ -48,8 +40,6 @@ owner explicitly changes the security model.
 
 ## Priority 3 — Production hardening
 
-- Connect the office picking-order save action to its intended backend Sheet and
-  replace the current test-mode confirmation.
 - Add a formal cleanup recovery action from `CLEANUP_REQUIRED` to `ACTIVE` with
   reason, user, timestamp, and permission rules.
 - Define whether cleanup, Lot editing, and location assignment require a

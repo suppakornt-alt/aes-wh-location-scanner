@@ -102,8 +102,8 @@ NOT_RUN | PASS | FAIL | BLOCKED
 | UI-002 | Apply category and velocity filters | Visible 3D stock changes correctly | NOT_RUN |
 | UI-003 | Open operations view on mobile | Cards and actions remain usable without horizontal overflow | NOT_RUN |
 | UI-004 | Open audit view | KPI counters and discrepancy list render | NOT_RUN |
-| UI-005 | Use office form with invalid ORD/product/Lot/quantity | Validation blocks save preview | NOT_RUN |
-| UI-006 | Complete office test-mode preview | Correct summary appears; no false claim of Sheet save | NOT_RUN |
+| UI-005 | Legacy office test-mode form: invalid input | Retired when `ออฟฟิศโกดัง` replaces the form | NOT_RUN |
+| UI-006 | Legacy office test-mode form: preview | Retired when `ออฟฟิศโกดัง` replaces the form | NOT_RUN |
 | UI-007 | Open on Android Chrome | Camera permission, keypad, layout, and scrolling work | NOT_RUN |
 | UI-008 | Open on desktop Chrome | Sidebar, forms, 3D, and office layout work | NOT_RUN |
 
@@ -114,20 +114,26 @@ These scenarios cover the approved next implementation described in
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
-| OFF-001 | Load cleaned pending ORD data | Eligible ORD lines show date, ORD, SKU, product name, amount, status, and action | NOT_RUN |
-| OFF-002 | Open `เบิกรายการ` for one ORD line | Required, allocated, remaining, and location-allocation controls appear | NOT_RUN |
-| OFF-003 | Open a location selector | Only current locations for the selected SKU with usable quantity appear | NOT_RUN |
-| OFF-004 | Split one SKU across two locations | Two allocation rows are retained with independent quantities | NOT_RUN |
-| OFF-005 | Allocate every SKU in one ORD exactly | Backend commits the full ORD allocation, audit events, and state deductions | NOT_RUN |
-| OFF-006 | Leave one SKU in the ORD incomplete | Full-ORD confirmation is rejected; no false completion occurs | NOT_RUN |
-| OFF-007 | Submit more than the required amount | Submission is rejected and quantities are unchanged | NOT_RUN |
-| OFF-008 | Select a location with insufficient current stock | Backend rejects after re-read; no partial deduction occurs | NOT_RUN |
-| OFF-009 | Use a stale location quantity | Server-side validation detects the changed quantity and prevents an over-deduction | NOT_RUN |
-| OFF-010 | Submit the same confirmation twice | Idempotency prevents a duplicate allocation or deduction | NOT_RUN |
-| OFF-011 | Confirm concurrent allocations | Locking prevents lost updates and negative stock | NOT_RUN |
-| OFF-012 | Reopen a completed ORD | It cannot be silently deducted a second time | NOT_RUN |
-| OFF-013 | Correct a committed allocation | Original history remains; correction uses an approved reversal/adjustment path | NOT_RUN |
-| OFF-014 | Use the office workflow on Android Chrome | Cards, selectors, numeric inputs, confirmation, and errors remain usable | NOT_RUN |
+| OFF-001 | Load `DATA : Current ORD` (header row 6) | ORDs without a `PENDING`/`COMPLETED` entry are listed with date, ORD, customer, SKU count, and `เบิกรายการ` | NOT_RUN |
+| OFF-002 | Open an ORD with the same product twice (e.g. 2 + 2) | One SKU card with required quantity 4 | NOT_RUN |
+| OFF-003 | Open a location selector | Only `ACTIVE` rows with `QTY > 0` for that SKU appear, showing location, Lot, and quantity | NOT_RUN |
+| OFF-004 | Split one SKU across two locations | Two rows are saved in `MAIN : Log พิกัดจาก ORD` | NOT_RUN |
+| OFF-005 | Choose the same location twice for one SKU | Blocked in the UI and rejected by the backend | NOT_RUN |
+| OFF-006 | Enter more than a location's current quantity | Blocked; admin must add quantity to the location first | NOT_RUN |
+| OFF-007 | Add a new location from the office page | Same form as picker; new location appears in the selector; ORD entries are kept | NOT_RUN |
+| OFF-008 | Add quantity to a location from the office page | Selector shows the new quantity; ORD entries are kept | NOT_RUN |
+| OFF-009 | Leave one SKU under- or over-allocated | Submit is disabled and the backend rejects it; nothing is written | NOT_RUN |
+| OFF-010 | Submit a fully allocated ORD | One `PENDING` status row and all allocation rows are written; stock is NOT deducted; ORD leaves the list | NOT_RUN |
+| OFF-011 | `DATA : Current ORD` changes after the ORD was opened | Submit is rejected with `ORD นี้มีการเปลี่ยนแปลง กรุณาโหลดใหม่` | NOT_RUN |
+| OFF-012 | Submit the same ORD twice (double-click or retry) | Second submit is rejected; only one submission exists | NOT_RUN |
+| OFF-013 | Cancel a `PENDING` ORD | Status becomes `CANCELED`; no stock change; ORD returns to the list | NOT_RUN |
+| OFF-014 | Redo a canceled ORD | New submission is saved; only its allocation rows are deducted later | NOT_RUN |
+| OFF-015 | Trigger runs before 4 hours | `PENDING` ORD is not deducted | NOT_RUN |
+| OFF-016 | Trigger runs after 4 hours | Locations are deducted, `Log ข้อมูลตำแหน่ง` gets one row per location with `AUTO`, ORD becomes `COMPLETED` | NOT_RUN |
+| OFF-017 | Location holds less than the chosen quantity at deduction time | Deducted to 0, row becomes `INACTIVE_EMPTY`, shortfall is logged | NOT_RUN |
+| OFF-018 | `COMPLETED` ORD still present in `DATA : Current ORD` | ORD is not listed and cannot be submitted again | NOT_RUN |
+| OFF-019 | Trigger and a worker pick hit the same location together | Locking prevents lost updates; quantity never goes negative | NOT_RUN |
+| OFF-020 | Use the office workflow on Android Chrome and desktop | Cards, selectors, numeric inputs, pop-ups, and theme match the existing app | NOT_RUN |
 
 ## Release evidence
 

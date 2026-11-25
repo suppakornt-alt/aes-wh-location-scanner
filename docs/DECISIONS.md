@@ -137,3 +137,47 @@ backend token-validation contract remain required.
 **Reason:** The current office form is test-mode work, but authentication and
 authorization are shared application infrastructure and must not be weakened
 by a page rewrite.
+
+## DEC-016 — Office allocation is location-based, full-ORD, with merged duplicates
+
+**Decision:** The admin chooses locations (`LOCATION_ID`), not Lots. One ORD
+is submitted as a whole. Rows with the same `ord_id + product_code` are merged
+into one requirement by summing `quantity`.
+
+**Reason:** A location row already fixes SKU, Lot, and coordinate. Merging
+duplicate product lines (paid and free) keeps the screen simple and removes the
+need for a line identifier, which `DATA : Current ORD` does not have.
+
+## DEC-017 — Four-hour hold before automatic stock deduction
+
+**Decision:** Submit saves the ORD as `PENDING` without deducting stock. A
+time-driven trigger every 15 minutes deducts ORDs that have been `PENDING` for
+four hours and marks them `COMPLETED`. During the hold, any authorized user may
+cancel (`CANCELED`). After `COMPLETED` there is no undo on the office page.
+
+**Reason:** Customers sometimes cancel after the delivery leaves. A hold avoids
+putting stock back by hand in most cases. Rare later cancellations are handled
+with the normal add action.
+
+## DEC-018 — Location data must match reality before allocation
+
+**Decision:** A chosen quantity may not exceed the location's current `QTY`.
+The admin fixes missing or understated locations from the office page using the
+existing `assign` and `add` actions. At deduction time, a location holding less
+than allocated is deducted to 0 and the shortfall is logged. No stock is
+reserved between `PENDING` ORDs.
+
+**Reason:** ERP is the stock authority. The location app helps new workers find
+products, so keeping its data correct matters more than blocking ORDs.
+
+## DEC-019 — ORD status lives in a separate sheet
+
+**Decision:** `DATA : Current ORD` is read-only to the app. ORD status is kept in
+`MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` as one row per `ord_id`, overwritten on
+status change (no status history). Chosen locations are appended to
+`MAIN : Log พิกัดจาก ORD` and never edited. Stock deductions are also audited
+in `MAIN : Log ข้อมูลตำแหน่ง`.
+
+**Reason:** `DATA : Current ORD` comes from an import range and is overwritten
+daily. A repeated submit for a `PENDING` or `COMPLETED` ORD is rejected, which
+gives retry safety without an extra ID.

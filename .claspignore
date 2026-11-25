@@ -1,5 +1,6 @@
 **/**
 !appsscript.json
 !Code.js
-!**/*.gs
+!backend/
+!backend/**/*.js
 

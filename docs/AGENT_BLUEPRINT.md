@@ -95,4 +95,4 @@ adapted only where a project has a stricter rule.
 - Do not put credentials, tokens, private URLs, or secret IDs in documentation.
 - Update the relevant document in the same change as a business-rule or data-model change.
 - Put ideas that are not approved for implementation in `NEXT_MIGRATION.md`.
-- Use `docs/project-log/wh-location3D_YYYY_MM_DD.md` for requested daily summaries.
+- Use `docs/project-log/wh-location3d_YYYY_MM_DD.md` for requested daily summaries.

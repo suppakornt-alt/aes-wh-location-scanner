@@ -2,7 +2,7 @@
 
 ## Project identity
 
-`wh-location3D` is a mobile-first warehouse location and stock-control application.
+`wh-location3d` is a mobile-first warehouse location and stock-control application.
 It has two user-facing areas:
 
 - Picker/frontline: authenticate, scan or enter a Lot number, view SKU locations,
@@ -18,7 +18,7 @@ and status content unless the project owner explicitly requests otherwise.
 
 ## Scope boundary
 
-This file is specific to `wh-location3D`. Do not import business rules, table
+This file is specific to `wh-location3d`. Do not import business rules, table
 names, identifiers, workflows, credentials, or assumptions from another project.
 When adapting a template, keep only reusable engineering rules and replace all
 project-specific content with facts verified in this repository or supplied by
@@ -30,7 +30,7 @@ URLs, deployment URLs, or other credentials in Markdown documentation.
 ## Repository and deployment structure
 
 ```text
-wh-location3D/
+wh-location3d/
 ├─ index.html                 # Authentication-first landing page
 ├─ pages/                     # Picker and office HTML pages
 ├─ js/                        # Frontend modules
@@ -239,7 +239,7 @@ a new version when required.
 If the project owner types `SUMMARIZE`, create or update:
 
 ```text
-docs/project-log/wh-location3D_YYYY_MM_DD.md
+docs/project-log/wh-location3d_YYYY_MM_DD.md
 ```
 
 Include date, completed work, decisions, changed files, verification, blockers,

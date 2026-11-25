@@ -1,4 +1,4 @@
-# wh-location3D
+# wh-location3d
 
 ## Status
 
@@ -8,7 +8,7 @@ for a new version and must not import assumptions from the consignment project.
 
 ## What the application does
 
-`wh-location3D` helps warehouse workers find, reconcile, and update product
+`wh-location3d` helps warehouse workers find, reconcile, and update product
 stock locations. It also contains an office picking-order page and a 3D view of
 active warehouse stock.
 

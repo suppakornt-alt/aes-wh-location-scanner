@@ -11,6 +11,7 @@ business rules. `AGENTS.md` remains the active instruction file.
 | `AGENTS.md` | Active coding, safety, deployment, and verification rules. |
 | `README.md` | Current production scope, setup, limitations, and deployment boundary. |
 | `DATA_MODEL.md` | Google Sheets, columns, identifiers, relationships, and derived data. |
+| `OFFICE_WAREHOUSE.md` | Approved requirements for the next ORD location-allocation workflow. |
 | `BUSINESS_RULES.md` | Authentication, validation, lifecycle, quantity, and cleanup rules. |
 | `UI_DESIGN.md` | Current pages, worker interactions, devices, and language. |
 | `TEST_PLAN.md` | Regression scenarios and release acceptance checks. |
@@ -64,6 +65,27 @@ Before changing an undocumented area, ask the project owner:
 - Which commands synchronize it?
 - What is the smallest safe production test?
 - What evidence is required before release?
+
+## Reusable global engineering rules
+
+This section is intended to be copied into future project `AGENTS.md` files and
+adapted only where a project has a stricter rule.
+
+### Comment contract
+
+- Every meaningful code change made for the project owner must include a nearby,
+  readable source comment explaining the change's intent and impact.
+- This applies to changed validation, data mappings, security boundaries, state
+  transitions, API actions, side effects, and non-obvious UI behavior.
+- Comments should explain why the code exists or what invariant it protects;
+  they do not need to narrate obvious syntax or repeat the function name.
+- Keep comments accurate as the implementation changes. Never use comments to
+  conceal uncertainty or to claim behavior that the code does not perform.
+- If code is generated, minified, vendor-owned, or cannot safely accept an
+  accurate maintainable comment, do not modify that code. Report the blocker
+  and wait for an approved source file or approach.
+- Documentation-only changes do not require source-code comments, but their
+  final response must still explain what documentation was synchronized.
 
 ## Documentation rules
 

@@ -5,7 +5,27 @@ application remains the active workplace system. Do not implement an item only
 because it appears here; confirm the desired behavior before changing code or
 data.
 
-## Priority 1 — Documented next module
+## Priority 1 — Office warehouse picking allocation
+
+Implement the approved `ออฟฟิศโกดัง` workflow from
+`docs/OFFICE_WAREHOUSE.md`.
+
+The implementation should:
+
+- consume the cleaned ORD work list;
+- show pending ORD lines to the warehouse administrator;
+- allow one SKU to be allocated across multiple current locations;
+- validate the latest location quantities under `LockService`;
+- write allocation and audit records; and
+- deduct the selected quantities from current location state without duplicate
+  submission or partial failure.
+
+The current office page and office JavaScript may be replaced as needed, while
+the shared authentication/session behavior remains intact. Confirm the live
+sheet names, headers, stable ORD-line identifier, statuses, and correction
+workflow before coding.
+
+## Priority 2 — Documented next module
 
 ### Add `ระบบฝากขาย`
 
@@ -26,7 +46,7 @@ Before implementation, define:
 It must use the existing one-time internal authentication session unless the
 owner explicitly changes the security model.
 
-## Priority 2 — Production hardening
+## Priority 3 — Production hardening
 
 - Connect the office picking-order save action to its intended backend Sheet and
   replace the current test-mode confirmation.
@@ -43,7 +63,7 @@ owner explicitly changes the security model.
 - Add stronger automated tests around quantity locks, merge behavior, and
   lifecycle filtering.
 
-## Priority 3 — Deployment and operations
+## Priority 4 — Deployment and operations
 
 - Record the exact GitHub Pages/GitHub Actions workflow in the repository.
 - Document the production Apps Script deployment/version procedure.

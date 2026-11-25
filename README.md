@@ -24,7 +24,12 @@ Current capabilities:
 - Safe empty-location closing and non-empty `CLEANUP_REQUIRED` marking.
 - 3D warehouse visualization with category and stock-velocity filters.
 - ERP reconciliation/audit view.
-- Office picking-order form.
+- Office picking-order form currently limited to local validation and preview.
+
+The next implementation scope is the `ออฟฟิศโกดัง` picking-allocation workflow:
+warehouse administrators will choose one or more current stock locations for
+each ORD line, and the backend will validate and deduct the selected quantities.
+See `docs/OFFICE_WAREHOUSE.md` for the approved requirements baseline.
 
 The planned third area is `ระบบฝากขาย`, a frontline consignment tire registry
 used before products are sent to a customer warehouse. Its authentication must
@@ -95,9 +100,10 @@ documentation.
 
 - `DATA : Current Stock` and `DATA : Stock By Lot` currently use row 6 as their
   header row. This is known and will be corrected later.
-- The office page currently validates and previews picking-order data locally;
-  its final Google Sheet save integration is still marked as a backend step in
-  the code.
+- The office page currently contains the earlier local validation/preview flow;
+  the approved location-allocation workflow has not been implemented yet.
+- The exact raw ORD, allocation, and State-sheet headers for the new office
+  workflow still need to be confirmed against the live Sheets.
 - `CLEANUP_REQUIRED` can later return to `ACTIVE`, but that recovery flow has
   not been defined or implemented yet.
 - Fine-grained supervisor permissions for cleanup actions have not yet been
@@ -110,6 +116,7 @@ documentation.
 - `AGENTS.md`: active working rules for AI agents and developers.
 - `docs/AGENT_BLUEPRINT.md`: interview and documentation maintenance template.
 - `docs/DATA_MODEL.md`: Sheets, headers, relationships, and identifiers.
+- `docs/OFFICE_WAREHOUSE.md`: approved next requirements for ORD location allocation.
 - `docs/BUSINESS_RULES.md`: validation, lifecycle, quantity, and authorization rules.
 - `docs/UI_DESIGN.md`: current screens, labels, devices, and interaction rules.
 - `docs/TEST_PLAN.md`: release and regression scenarios.

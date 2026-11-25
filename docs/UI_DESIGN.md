@@ -128,6 +128,37 @@ The current code identifies this page as test mode and does not yet send the
 final order to a Google Sheet backend. That limitation must remain visible until
 the backend save action is implemented.
 
+### Approved next workflow: `ออฟฟิศโกดัง`
+
+The next implementation replaces the earlier test-mode flow with ORD location
+allocation. The detailed requirements are in `docs/OFFICE_WAREHOUSE.md`.
+
+The first screen shows pending ORD work with:
+
+- ORD date
+- ORD number
+- product code
+- product name
+- required amount
+- allocation status
+- `เบิกรายการ` action
+
+The allocation screen opens the full ORD and shows every SKU's required,
+allocated, and remaining amount. The administrator chooses a location from a
+product-filtered selector, enters the quantity to pick, and uses `+` to add
+another location when the SKU is split across locations. Final confirmation is
+for the full ORD, not just the last visible SKU.
+
+The UI must show the current available quantity for each choice, prevent invalid
+or duplicate location entries, and require explicit final confirmation before
+the backend changes stock. Location text is display-only; the submitted
+`location_id` is authoritative.
+
+The existing one-time authentication session, Thai-first worker language,
+shared styling, and responsive mobile behavior remain in force. The office
+page and office JavaScript may be substantially replaced during implementation,
+but authentication/session contracts must not be removed accidentally.
+
 ## Planned third page: `ระบบฝากขาย`
 
 The project will add a third page for frontline consignment tire registration

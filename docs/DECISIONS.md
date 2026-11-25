@@ -104,3 +104,36 @@ are complete.
 
 **Reason:** Accurate documentation is more useful to future AI sessions than a
 clean-looking document that hides unfinished behavior.
+
+## DEC-013 — Make `ออฟฟิศโกดัง` the next implementation area
+
+**Decision:** The next implementation will replace the current office
+test-mode picking form with the ORD location-allocation workflow documented in
+`docs/OFFICE_WAREHOUSE.md`.
+
+**Reason:** Warehouse administrators need to choose the physical source
+locations for ORD lines, while the backend should perform the controlled stock
+deduction and audit update.
+
+**Boundary:** The current ERP export, shared-drive handoff, and two-hour
+cleaning cycle remain unchanged for the first version. Picker and 3D workflows
+are out of scope.
+
+## DEC-014 — Store one allocation row per selected location
+
+**Decision:** If one SKU is picked from multiple locations, preserve one saved
+allocation row per location with its own quantity. The authoritative reference
+is `location_id`; display location text is a snapshot for people.
+
+**Reason:** This keeps split picks traceable and allows the backend to validate
+and deduct each physical source independently.
+
+## DEC-015 — Preserve the shared authentication boundary while rebuilding office UI
+
+**Decision:** The office page and office JavaScript may be substantially
+replaced for the new workflow, but the existing one-time Google session and
+backend token-validation contract remain required.
+
+**Reason:** The current office form is test-mode work, but authentication and
+authorization are shared application infrastructure and must not be weakened
+by a page rewrite.

@@ -107,6 +107,28 @@ NOT_RUN | PASS | FAIL | BLOCKED
 | UI-007 | Open on Android Chrome | Camera permission, keypad, layout, and scrolling work | NOT_RUN |
 | UI-008 | Open on desktop Chrome | Sidebar, forms, 3D, and office layout work | NOT_RUN |
 
+## Office warehouse picking allocation
+
+These scenarios cover the approved next implementation described in
+`docs/OFFICE_WAREHOUSE.md`.
+
+| ID | Scenario | Expected result | Status |
+| --- | --- | --- | --- |
+| OFF-001 | Load cleaned pending ORD data | Eligible ORD lines show date, ORD, SKU, product name, amount, status, and action | NOT_RUN |
+| OFF-002 | Open `เบิกรายการ` for one ORD line | Required, allocated, remaining, and location-allocation controls appear | NOT_RUN |
+| OFF-003 | Open a location selector | Only current locations for the selected SKU with usable quantity appear | NOT_RUN |
+| OFF-004 | Split one SKU across two locations | Two allocation rows are retained with independent quantities | NOT_RUN |
+| OFF-005 | Allocate every SKU in one ORD exactly | Backend commits the full ORD allocation, audit events, and state deductions | NOT_RUN |
+| OFF-006 | Leave one SKU in the ORD incomplete | Full-ORD confirmation is rejected; no false completion occurs | NOT_RUN |
+| OFF-007 | Submit more than the required amount | Submission is rejected and quantities are unchanged | NOT_RUN |
+| OFF-008 | Select a location with insufficient current stock | Backend rejects after re-read; no partial deduction occurs | NOT_RUN |
+| OFF-009 | Use a stale location quantity | Server-side validation detects the changed quantity and prevents an over-deduction | NOT_RUN |
+| OFF-010 | Submit the same confirmation twice | Idempotency prevents a duplicate allocation or deduction | NOT_RUN |
+| OFF-011 | Confirm concurrent allocations | Locking prevents lost updates and negative stock | NOT_RUN |
+| OFF-012 | Reopen a completed ORD | It cannot be silently deducted a second time | NOT_RUN |
+| OFF-013 | Correct a committed allocation | Original history remains; correction uses an approved reversal/adjustment path | NOT_RUN |
+| OFF-014 | Use the office workflow on Android Chrome | Cards, selectors, numeric inputs, confirmation, and errors remain usable | NOT_RUN |
+
 ## Release evidence
 
 Before a production change is called ready, record:

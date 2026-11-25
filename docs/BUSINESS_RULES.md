@@ -115,6 +115,32 @@ Location quantity and lifecycle changes append a row to
 `MAIN : Log ข้อมูลตำแหน่ง`. The log records the authenticated user, action,
 SKU, quantity delta, source/destination locations, and a reference/reason.
 
+## Office warehouse picking allocation
+
+The next implementation scope is the `ออฟฟิศโกดัง` workflow described in
+`docs/OFFICE_WAREHOUSE.md`.
+
+- The cleaned ORD data is the input work list; the first version does not
+  download directly from the ERP.
+- The administrator selects locations for each ORD line. Location choices come
+  from current state data and must match the selected product code.
+- One SKU may be split across multiple locations. Each selected location is a
+  separate allocation record with its own `pull_off_amount`.
+- The intended confirmation boundary is the full ORD: every required SKU line
+  must be allocated before one final confirmation commits the ORD.
+- Quantities must be positive, and the final allocation total must equal the
+  required amount for every ORD line before the ORD is marked complete.
+- The backend must re-read state, acquire `LockService`, validate availability,
+  and perform the allocation/audit/deduction as one protected operation.
+- An invalid or insufficient-stock submission must make no quantity change.
+- Completed lines cannot be deducted again. Reversals or corrections must
+  preserve the original allocation and audit history.
+- Duplicate submissions and uncertain network retries must be safe through a
+  stable commit or idempotency reference.
+
+The exact physical Sheets, status names, partial-allocation rule, and correction
+permissions remain decisions to confirm before implementation.
+
 ## Current API actions
 
 The Apps Script router currently exposes these actions after authentication:

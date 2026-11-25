@@ -18,6 +18,12 @@ MAIN : ตำแหน่งสินค้าทั้งหมด
 
 MAIN : Log ข้อมูลตำแหน่ง
     audit trail for pick, add, relocate, close, receive, and Lot edits
+
+Raw ORD data
+    cleaned ORD lines waiting for office allocation
+
+ORD location allocation data
+    one row per selected source location and picked quantity
 ```
 
 The backend resolves a scanned or entered Lot through `DATA : Stock By Lot`,
@@ -162,6 +168,31 @@ This is an append-only operational audit log for location quantity and lifecycle
 actions. It is not the source of truth for the current quantity; the main
 location sheet remains the current-state source.
 
+## Office warehouse allocation data
+
+The approved next office workflow is documented in
+`docs/OFFICE_WAREHOUSE.md`. It introduces two logical data sets that are not
+yet confirmed as physical Sheets:
+
+- cleaned raw ORD lines with `ord_id`, `product_code`, and `amount`, plus a
+  stable `ord_line_id` when the ERP can repeat a product within one ORD;
+- allocation rows with `ord_line_id`, `ord_id`, `product_code`, `location_id`,
+  display `location`, and `pull_off_amount`.
+
+One allocation row represents one selected source location. A single SKU may
+therefore produce multiple allocation rows. `location_id` is authoritative;
+the display location is not sufficient for a stock deduction.
+
+The existing `MAIN : ตำแหน่งสินค้าทั้งหมด` sheet is the documented current
+location source. The new workflow must verify the live mapping before coding:
+`LOCATION_ID` to `location_id`, `SKU_ID` to `product_code`, `DISPLAY_LOC` to
+`location`, and `QTY` to `amount`.
+
+Every committed allocation must be auditable and must reference the ORD and
+allocation/commit identifier. The final choice between extending
+`MAIN : Log ข้อมูลตำแหน่ง` and adding a dedicated stock-movement table is still
+open.
+
 ## Derived reconciliation
 
 For a resolved SKU:
@@ -184,3 +215,5 @@ are shown separately and are not silently included in frontline quantity.
 - The recovery workflow from `CLEANUP_REQUIRED` back to `ACTIVE` is not yet
   defined.
 - No separate user/role sheet is currently documented for this internal app.
+- The physical raw ORD and allocation sheets, header rows, and stable ORD-line
+  identifier are not yet confirmed for the new office workflow.

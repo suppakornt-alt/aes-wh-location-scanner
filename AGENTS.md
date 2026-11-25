@@ -137,7 +137,13 @@ separate location row.
 
 - Write readable, production-grade code with normal spacing and indentation.
 - Prefer small focused functions with one clear responsibility.
-- Use descriptive names and concise comments for non-obvious decisions.
+- Add a nearby, readable comment for every meaningful code change made for the
+  project owner. The comment must explain the intent and impact of the change,
+  including changed validation, data mapping, security, state transitions, API
+  actions, or UI behavior. Do not add meaningless comments to obvious syntax.
+- If a code area is generated, minified, vendor-owned, or cannot safely accept
+  an accurate maintainable comment, do not modify it; report the blocker and
+  wait for an approved source or approach.
 - Preserve existing behavior unless the requested change requires otherwise.
 - Avoid unnecessary dependencies.
 - Escape user-provided values before inserting them into the DOM.

@@ -9,8 +9,8 @@ for a new version and must not import assumptions from the consignment project.
 ## What the application does
 
 `wh-location3d` helps warehouse workers find, reconcile, and update product
-stock locations. It also contains an office picking-order page and a 3D view of
-active warehouse stock.
+stock locations. It also contains an office ORD location-allocation page and a
+3D view of active warehouse stock.
 
 Current capabilities:
 
@@ -24,12 +24,11 @@ Current capabilities:
 - Safe empty-location closing and non-empty `CLEANUP_REQUIRED` marking.
 - 3D warehouse visualization with category and stock-velocity filters.
 - ERP reconciliation/audit view.
-- Office picking-order form currently limited to local validation and preview.
-
-The next implementation scope is the `ออฟฟิศโกดัง` picking-allocation workflow:
-warehouse administrators will choose one or more current stock locations for
-each ORD line, and the backend will validate and deduct the selected quantities.
-See `docs/OFFICE_WAREHOUSE.md` for the approved requirements baseline.
+- `ออฟฟิศโกดัง` ORD location allocation: administrators choose locations for
+  every SKU of an ORD from `DATA : Current ORD`. After a four-hour cancellation
+  hold, a timed Apps Script trigger deducts the stock. See
+  `docs/OFFICE_WAREHOUSE.md`. Implemented; release testing (`OFF-*` in the test
+  plan) is still to be run.
 
 The planned third area is `ระบบฝากขาย`, a frontline consignment tire registry
 used before products are sent to a customer warehouse. Its authentication must
@@ -52,7 +51,7 @@ in this documentation.
 ```text
 index.html                 Authentication and team chooser
 pages/picker.html          Picker scanner, 3D, operations, and audit views
-pages/office.html          Office picking-order page
+pages/office.html          Office ORD location-allocation page
 js/                        Frontend modules
 css/style.css              Shared frontend styling
 backend/                   Apps Script source and manifest
@@ -96,14 +95,23 @@ After a backend push, update the Apps Script web-app deployment to a new
 version when required. Do not place credentials or deployment URLs in Git or
 documentation.
 
+One-time setup for the office ORD workflow (after its first backend push):
+
+1. In the Apps Script editor, run `installOrderDeductionTrigger` once and accept
+   the new permission (`script.scriptapp`, needed to create the trigger).
+2. Check the Triggers page: `processDueOrderAllocations` runs every 15 minutes.
+3. Deploy a new web-app version so the new API actions are live.
+
+The sheets `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` and `MAIN : Log พิกัดจาก ORD`
+are created automatically with their header row on first use.
+
 ## Known current limitations
 
-- `DATA : Current Stock` and `DATA : Stock By Lot` currently use row 6 as their
-  header row. This is known and will be corrected later.
-- The office page currently contains the earlier local validation/preview flow;
-  the approved location-allocation workflow has not been implemented yet.
-- The exact raw ORD, allocation, and State-sheet headers for the new office
-  workflow still need to be confirmed against the live Sheets.
+- `DATA : Current Stock`, `DATA : Stock By Lot`, and `DATA : Current ORD`
+  currently use row 6 as their header row. This is known and will be corrected
+  later.
+- The office ORD workflow has no undo after stock is deducted; staff restore
+  stock with the normal add action.
 - `CLEANUP_REQUIRED` can later return to `ACTIVE`, but that recovery flow has
   not been defined or implemented yet.
 - Fine-grained supervisor permissions for cleanup actions have not yet been
@@ -116,7 +124,7 @@ documentation.
 - `AGENTS.md`: active working rules for AI agents and developers.
 - `docs/AGENT_BLUEPRINT.md`: interview and documentation maintenance template.
 - `docs/DATA_MODEL.md`: Sheets, headers, relationships, and identifiers.
-- `docs/OFFICE_WAREHOUSE.md`: approved next requirements for ORD location allocation.
+- `docs/OFFICE_WAREHOUSE.md`: ORD location allocation requirements and behavior.
 - `docs/BUSINESS_RULES.md`: validation, lifecycle, quantity, and authorization rules.
 - `docs/UI_DESIGN.md`: current screens, labels, devices, and interaction rules.
 - `docs/TEST_PLAN.md`: release and regression scenarios.

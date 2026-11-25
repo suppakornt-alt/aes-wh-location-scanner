@@ -1442,13 +1442,213 @@ h1, h2, h3 {
 }
 
 /* ==========================================
-   OFFICE ORDER FORM (office.html)
+   OFFICE WAREHOUSE ORD ALLOCATION (office.html)
+   Replaces the old test-mode Lot form. Uses the shared theme variables so
+   light/dark and the existing look stay the same.
    ========================================== */
+.svg-sprite {
+  position: absolute;
+}
+
+a.nav-item {
+  text-decoration: none;
+}
+
+.of-nav-count {
+  margin-left: auto;
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: var(--accent-orange);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+}
+
 .of-wrap {
   padding-top: 16px;
 }
 
-.of-test-banner {
+/* Panels and cards toggled with the hidden attribute must really hide. */
+.of-wrap [hidden],
+.modal-overlay[hidden],
+.of-nav-count[hidden] {
+  display: none !important;
+}
+
+.of-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.of-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.of-search {
+  position: relative;
+  flex: 1;
+  color: var(--text-muted);
+}
+
+.of-search .ic {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.of-search .of-input {
+  padding-left: 36px;
+}
+
+.of-hint {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.of-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.of-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+/* ORD list and PENDING list cards */
+.of-ord-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.of-ord-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.of-ord-title {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.of-ord-meta {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.of-ord-skus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--accent-blue);
+}
+
+.of-due {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent-orange);
+}
+
+.of-btn-danger {
+  color: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+.of-btn-danger:hover {
+  color: #fff;
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+/* Allocation screen */
+.of-back {
+  align-self: flex-start;
+}
+
+.of-ord-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.of-sku-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.of-sku-done {
+  border-color: var(--accent-green);
+}
+
+.of-sku-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.of-code-chip {
+  color: var(--accent-blue);
+}
+
+.of-sku-need {
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.of-sku-need strong {
+  color: var(--text-primary);
+}
+
+.of-progress {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.of-progress-ok {
+  background: rgba(35, 134, 54, 0.12);
+  color: var(--accent-green);
+}
+
+.of-progress-todo {
+  background: rgba(210, 153, 34, 0.12);
+  color: var(--accent-orange);
+}
+
+.of-progress-over {
+  background: rgba(218, 54, 51, 0.12);
+  color: var(--accent-red);
+}
+
+.of-warn {
   font-size: 14px;
   color: var(--accent-orange);
   background: rgba(210, 153, 34, 0.12);
@@ -1457,16 +1657,108 @@ h1, h2, h3 {
   padding: 8px 12px;
 }
 
-.of-field {
+.of-alloc-rows {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
-.of-label {
-  font-size: 15px;
+.of-alloc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px auto 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.of-alloc-row .icon-btn {
+  width: 44px;
+  height: 48px;
+}
+
+.of-alloc-row .icon-btn:disabled,
+.of-alloc-row .btn:disabled,
+.of-sku-actions .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.of-row-error {
+  grid-column: 1 / -1;
+  margin-top: -4px;
+  font-size: 13px;
+  color: var(--accent-red);
+}
+
+.of-sku-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Add-location modal */
+.of-modal-product {
+  font-size: 16px;
   font-weight: 500;
-  color: var(--text-muted);
+}
+
+/* SweetAlert content (kept here instead of inline styles) */
+.of-swal-text {
+  text-align: left;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.of-swal-note {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  background: rgba(210, 153, 34, 0.14);
+  color: var(--accent-orange);
+}
+
+.of-confirm-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.of-confirm-table th,
+.of-confirm-table td {
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.of-confirm-table th {
+  opacity: 0.7;
+  font-weight: 500;
+}
+
+.of-confirm-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .of-ord-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .of-sku-head {
+    flex-direction: column;
+  }
+
+  .of-alloc-row {
+    grid-template-columns: minmax(0, 1fr) 96px 44px;
+  }
+
+  /* On phones the location selector takes a full line; amount, เติม and
+     remove sit below it. */
+  .of-alloc-row select {
+    grid-column: 1 / -1;
+  }
 }
 
 .of-input {
@@ -1490,154 +1782,12 @@ h1, h2, h3 {
   border-color: var(--accent-red);
 }
 
-#product-blocks {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.of-block {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.of-block-err {
-  border-color: var(--accent-red);
-}
-
-.of-block-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.of-block-title {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-/* Searchable product dropdown */
-.of-combo {
-  position: relative;
-}
-
-.of-combo-list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 280px;
-  overflow-y: auto;
-  background: var(--bg-card);
-  border: 1px solid var(--accent-blue);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-  z-index: 60;
-}
-
-.of-combo-list[hidden] {
-  display: none;
-}
-
-.of-combo-item {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--border-color);
-  cursor: pointer;
-}
-
-.of-combo-item:last-child {
-  border-bottom: none;
-}
-
-.of-combo-item:hover,
-.of-combo-item:active {
-  background: var(--bg-card-subtle);
-}
-
-.of-combo-code {
-  flex-shrink: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--accent-blue);
-}
-
-.of-combo-name {
-  font-size: 15px;
-  color: var(--text-primary);
-}
-
-.of-combo-empty {
-  padding: 14px 12px;
-  font-size: 15px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-/* After a product is chosen */
-.of-after {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.of-after[hidden] {
-  display: none;
-}
-
 .of-prod-line {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 16px;
   font-weight: 500;
-}
-
-.of-lot-head,
-.of-lot-row {
-  display: grid;
-  grid-template-columns: 1.7fr 1fr 44px;
-  gap: 8px;
-  align-items: center;
-}
-
-.of-lot-head {
-  font-size: 14px;
-  color: var(--text-muted);
-  margin-bottom: -4px;
-}
-
-.of-lots {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.of-lot-del {
-  width: 44px;
-  height: 48px;
-}
-
-.of-lot-del:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.of-add-lot {
-  align-self: flex-start;
-}
-
-.of-add-product {
-  min-height: 48px;
 }
 
 /* Sticky save bar */
@@ -1671,99 +1821,6 @@ h1, h2, h3 {
   font-weight: 600;
 }
 
-/* ORD field: fixed prefix + digits-only input */
-.of-ord-wrap {
-  display: flex;
-}
-
-.of-ord-prefix {
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  height: 48px;
-  background: var(--bg-card-subtle);
-  border: 1px solid var(--border-color);
-  border-right: none;
-  border-radius: 8px 0 0 8px;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.of-ord-wrap .of-input {
-  border-radius: 0 8px 8px 0;
-}
-
-/* Lot picker (choose lots from the list that exists in stock) */
-.of-pick-toggle {
-  align-self: flex-start;
-}
-
-.of-lotpick {
-  background: var(--bg-card-subtle);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.of-lotpick-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 15px;
-}
-
-.of-oldest-n {
-  width: 104px;
-  height: 38px;
-  font-size: 16px;
-}
-
-.of-lotpick-list {
-  max-height: 260px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-card);
-}
-
-.of-lotpick-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-color);
-  cursor: pointer;
-}
-
-.of-lotpick-row:last-child {
-  border-bottom: none;
-}
-
-.of-lotpick-row input[type="checkbox"] {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  accent-color: var(--accent-blue);
-}
-
-.of-lp-lot {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.of-lp-meta {
-  margin-left: auto;
-  font-size: 14px;
-  color: var(--text-muted);
-  text-align: right;
-}
 /* Authentication-first landing */
 .login-gate {
   width: min(100%, 420px);

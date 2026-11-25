@@ -2,9 +2,19 @@
 
 ## Status
 
-This is the approved first-version scope for the `ออฟฟิศโกดัง` page. The
-requirements were agreed with the project owner on 2026-11-26. Code changes
-start only after the owner gives the signal to plan and implement.
+This is the first-version scope for the `ออฟฟิศโกดัง` page, agreed with the
+project owner on 2026-11-26 and implemented the same day. Release testing
+(`OFF-*` in `docs/TEST_PLAN.md`) has not been run yet.
+
+Implementation:
+
+| Part | File |
+| --- | --- |
+| Page | `pages/office.html`, `js/office.js`, `css/style.css` (`of-*` classes) |
+| Backend | `backend/office-allocation.js` |
+| Config | `backend/Code.js` (`SHEET_ORD`, `ORD_HEADER_ROW`, `SHEET_ORD_STATUS`, `SHEET_ORD_ALLOCATION`, `ORD_HOLD_HOURS`) |
+| API actions | `getOfficeOrders`, `getOrderLocationChoices`, `submitOrderAllocation`, `cancelOrderAllocation`, plus existing `add` and `assign` |
+| Trigger | `processDueOrderAllocations`, installed once with `installOrderDeductionTrigger` |
 
 ## Purpose
 

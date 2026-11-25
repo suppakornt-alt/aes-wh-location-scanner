@@ -111,27 +111,13 @@ The audit view compares ERP and frontline values and provides KPI counts for
 unassigned, under, and over results. It is a review surface; it must not
 silently change stock quantities.
 
-## Office page
+## Office page: `ออฟฟิศโกดัง`
 
-The office page currently provides a picking-order form:
+The office page provides ORD location allocation. It replaced the earlier
+test-mode Lot form. The detailed requirements are in `docs/OFFICE_WAREHOUSE.md`.
 
-```text
-ORD number
-    -> add product blocks
-    -> add Lot and quantity rows
-    -> validate
-    -> preview
-    -> local test-mode confirmation
-```
-
-The current code identifies this page as test mode and does not yet send the
-final order to a Google Sheet backend. That limitation must remain visible until
-the backend save action is implemented.
-
-### Approved next workflow: `ออฟฟิศโกดัง`
-
-The next implementation replaces the test-mode Lot form with ORD location
-allocation. The detailed requirements are in `docs/OFFICE_WAREHOUSE.md`.
+The sidebar has two views: `เบิกสินค้าตาม ORD` and `รอตัดสต็อก` (with a count
+badge for `PENDING` ORDs).
 
 ```text
 Pending ORD list
@@ -143,17 +129,22 @@ Pending ORD list
     -> ORD moves to the PENDING list for 4 hours, then stock is deducted
 ```
 
-**Pending ORD list:** one row or card per ORD with `order_date`, `ord_id`,
-`customer`, SKU count, and `เบิกรายการ`.
+**Pending ORD list:** one card per ORD with `order_date`, `ord_id`,
+`customer`, each SKU with its quantity, and `เบิกรายการ`. A search box filters
+by ORD, customer, or product code.
 
 **Allocation screen:** each SKU card shows code, name, unit, required,
 allocated, and remaining quantity. Each location row has a selector showing
 `DISPLAY_LOC`, Lot, and current quantity, plus a quantity input. The same
-location cannot be chosen twice for one SKU. Free lines are not labelled.
+location cannot be chosen twice for one SKU. Free lines are not labelled. A SKU
+with exactly one location has it pre-selected; the admin still enters the
+amount. The card turns green when the SKU is exactly allocated.
 
-**Fixing location data:** each SKU card has a button to add a new location,
-using the same form as the picker page, and a way to add quantity to a listed
-location. The ORD in progress stays on screen and the choices reload.
+**Fixing location data:** each SKU card has `เพิ่มพิกัดใหม่`, which opens the
+same coordinate, level, Lot, and quantity fields as the picker page (the
+product is already known, so no Lot scan is needed). Each location row has
+`เติม` to add quantity to that location. The ORD in progress stays on screen
+and the choices reload.
 
 **Submit:** `ยืนยันการเบิก` is enabled only when every SKU is exactly allocated.
 A confirmation pop-up summarizes the ORD. If the backend reports that the ORD

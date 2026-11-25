@@ -10,8 +10,8 @@ data.
 Implement the approved `ออฟฟิศโกดัง` workflow from
 `docs/OFFICE_WAREHOUSE.md`.
 
-Requirements and sheet columns are agreed (DEC-016 to DEC-019). Ready for
-planning and implementation when the owner gives the signal.
+Implemented on 2026-11-26 (DEC-016 to DEC-019). Remaining: run the `OFF-*`
+release tests and install the deduction trigger in production.
 
 Later improvements, not in the first version: draft saving, editing a
 `PENDING` ORD, undo after `COMPLETED`, free-goods labels, and stock reservation

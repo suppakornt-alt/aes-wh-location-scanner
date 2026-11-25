@@ -7,6 +7,16 @@ const CONFIG = {
   STOCK_HEADER_ROW: 6,
   SHEET_LOT: 'DATA : Stock By Lot',
   LOT_HEADER_ROW: 6,
+  // Office warehouse ORD allocation (docs/OFFICE_WAREHOUSE.md).
+  // DATA : Current ORD is read-only input; its header is on physical row 6.
+  SHEET_ORD: 'DATA : Current ORD',
+  ORD_HEADER_ROW: 6,
+  // One row per ord_id with its status (PENDING / COMPLETED / CANCELED).
+  SHEET_ORD_STATUS: 'MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว',
+  // One row per location chosen for a submitted ORD.
+  SHEET_ORD_ALLOCATION: 'MAIN : Log พิกัดจาก ORD',
+  // Hours a submitted ORD waits for customer cancellation before stock is cut.
+  ORD_HOLD_HOURS: 4,
   GOOGLE_CLIENT_ID: '457054725392-m4mrkfmceleivpg8a9f60oqgmg9ufeds.apps.googleusercontent.com',
   ALLOWED_EMAIL_DOMAIN: '@aesen.co.th',
   ALLOWED_EXCEPTION_EMAILS: [
@@ -146,6 +156,24 @@ function doPost(e) {
           success: true,
           data: getReconciliationData()
         };
+        break;
+
+      // Office warehouse ORD allocation. Stock is deducted later by the
+      // processDueOrderAllocations trigger, never by these actions.
+      case 'getOfficeOrders':
+        result = getOfficeOrders();
+        break;
+
+      case 'getOrderLocationChoices':
+        result = getOrderLocationChoices(payload);
+        break;
+
+      case 'submitOrderAllocation':
+        result = submitOrderAllocation(payload);
+        break;
+
+      case 'cancelOrderAllocation':
+        result = cancelOrderAllocation(payload);
         break;
 
       default:

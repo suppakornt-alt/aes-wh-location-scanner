@@ -134,14 +134,27 @@ function addStockIn(locId, qtyToAdd) {
     const data = sheet.getDataRange().getValues();
     const columns = getColumnIndexMap(data[0] || []);
 
-    for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === String(locId)) {
-        if (!isActiveLocationRow(data[i], columns)) return { success: false, message: 'พิกัดนี้ไม่ได้เปิดใช้งาน' };
-        const currentQty = Number(data[i][6]) || 0;
-        const newQty = currentQty + addQty;
-        sheet.getRange(i + 1, 7).setValue(newQty);
+    // Resolve columns by header name: the office page now also uses this
+    // action, and header-based access survives column moves in the sheet.
+    const qtyColumn = columns.QTY;
+    if (qtyColumn === undefined) return { success: false, message: 'ชีตตำแหน่งสินค้าไม่มีคอลัมน์ QTY' };
 
-        logTransaction(userEmail, 'เติมเข้า (IN)', data[i][1], addQty, '-', data[i][15], 'เติมสต็อกเดิม');
+    for (let i = 1; i < data.length; i++) {
+      if (String(getColumnValue(data[i], columns, 'LOCATION_ID', '')).trim() === String(locId).trim()) {
+        if (!isActiveLocationRow(data[i], columns)) return { success: false, message: 'พิกัดนี้ไม่ได้เปิดใช้งาน' };
+        const currentQty = Number(data[i][qtyColumn]) || 0;
+        const newQty = currentQty + addQty;
+        sheet.getRange(i + 1, qtyColumn + 1).setValue(newQty);
+
+        logTransaction(
+          userEmail,
+          'เติมเข้า (IN)',
+          getColumnValue(data[i], columns, 'SKU_ID', ''),
+          addQty,
+          '-',
+          getColumnValue(data[i], columns, 'DISPLAY_LOC', ''),
+          'เติมสต็อกเดิม'
+        );
         return { success: true, remaining: newQty };
       }
     }

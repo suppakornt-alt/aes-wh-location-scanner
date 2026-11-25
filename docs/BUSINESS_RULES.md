@@ -117,8 +117,9 @@ SKU, quantity delta, source/destination locations, and a reference/reason.
 
 ## Office warehouse picking allocation
 
-The approved next implementation is the `ออฟฟิศโกดัง` workflow. Full
-requirements are in `docs/OFFICE_WAREHOUSE.md`; the key rules are:
+The `ออฟฟิศโกดัง` workflow is implemented in `backend/office-allocation.js`
+and `js/office.js`. Full requirements are in `docs/OFFICE_WAREHOUSE.md`; the
+key rules are:
 
 - Input is `DATA : Current ORD` (header row 6). The app never writes to it.
 - Rows with the same `ord_id + product_code` are merged into one SKU
@@ -163,14 +164,18 @@ assign
 get3D
 getOps
 audit
+getOfficeOrders
+getOrderLocationChoices
+submitOrderAllocation
+cancelOrderAllocation
 ```
 
 `assign` creates a new location row and is logged as `รับเข้า (RECEIVE)`.
+`add` resolves its columns by header name.
 
-The office workflow will add actions for loading pending ORDs, loading location
-choices, submitting, listing `PENDING` ORDs, and canceling. Their final names
-are set during implementation. The timed deduction is a trigger, not an API
-action.
+The four office actions never deduct stock. The timed deduction is the
+`processDueOrderAllocations` trigger (not an API action) and is logged as
+`เบิกตาม ORD (ORD_PICK)`.
 
 The planned consignment registry will use the same authentication model but its
 business rules have not yet been defined here.
@@ -179,7 +184,6 @@ business rules have not yet been defined here.
 
 - Cleanup recovery back to `ACTIVE` is not implemented.
 - Supervisor/admin action boundaries are not implemented as separate roles.
-- The office page is still the old test-mode Lot form until the `ออฟฟิศโกดัง`
-  workflow is implemented.
+- `pick` and `relocate` still read some columns by fixed index.
 - Client-request idempotency for uncertain network retries is not yet defined
   for every quantity operation.

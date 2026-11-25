@@ -8,8 +8,8 @@ It has two user-facing areas:
 - Picker/frontline: authenticate, scan or enter a Lot number, view SKU locations,
   compare frontline quantity with ERP quantity, pick, add, relocate, record Lot
   numbers, and flag invalid locations for cleanup.
-- Warehouse office: authenticate and create picking-order information for the
-  warehouse team.
+- Warehouse office: authenticate and choose the source locations for each ORD
+  (`ออฟฟิศโกดัง`); stock is deducted automatically after a four-hour hold.
 
 The application also provides a 3D warehouse view for active stock locations.
 Thai is the primary worker-facing language. Always communicate with the project
@@ -51,6 +51,8 @@ Backend responsibilities are split as follows:
 - `backend/warehouse-data.js`: warehouse and reconciliation data reads.
 - `backend/warehouse-lookups.js`: Lot and SKU lookups.
 - `backend/warehouse-operations.js`: pick, add, relocate, close, and Lot updates.
+- `backend/office-allocation.js`: office ORD loading, location choices, submit,
+  cancel, and the timed stock-deduction trigger.
 
 ## Current workflow
 
@@ -178,7 +180,7 @@ read the relevant project documents when present:
 - `docs/UI_DESIGN.md`: screens, navigation, device behavior, and language.
 - `docs/TEST_PLAN.md`: release scenarios and acceptance criteria.
 - `docs/DECISIONS.md`: important architecture decisions and reasons.
-- `docs/OFFICE_WAREHOUSE.md`: approved `ออฟฟิศโกดัง` ORD allocation workflow.
+- `docs/OFFICE_WAREHOUSE.md`: `ออฟฟิศโกดัง` ORD allocation workflow.
 - `docs/NEXT_MIGRATION.md`: future work that is not approved for coding yet.
 - `docs/AGENT_BLUEPRINT.md`: documentation checklist for future sessions.
 

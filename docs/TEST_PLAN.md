@@ -102,15 +102,19 @@ NOT_RUN | PASS | FAIL | BLOCKED
 | UI-002 | Apply category and velocity filters | Visible 3D stock changes correctly | NOT_RUN |
 | UI-003 | Open operations view on mobile | Cards and actions remain usable without horizontal overflow | NOT_RUN |
 | UI-004 | Open audit view | KPI counters and discrepancy list render | NOT_RUN |
-| UI-005 | Legacy office test-mode form: invalid input | Retired when `ออฟฟิศโกดัง` replaces the form | NOT_RUN |
-| UI-006 | Legacy office test-mode form: preview | Retired when `ออฟฟิศโกดัง` replaces the form | NOT_RUN |
 | UI-007 | Open on Android Chrome | Camera permission, keypad, layout, and scrolling work | NOT_RUN |
 | UI-008 | Open on desktop Chrome | Sidebar, forms, 3D, and office layout work | NOT_RUN |
 
 ## Office warehouse picking allocation
 
-These scenarios cover the approved next implementation described in
-`docs/OFFICE_WAREHOUSE.md`.
+These scenarios cover the `ออฟฟิศโกดัง` workflow described in
+`docs/OFFICE_WAREHOUSE.md`. The old office test-mode form scenarios (UI-005,
+UI-006) were retired when the form was replaced.
+
+Before OFF-015 to OFF-019, run `installOrderDeductionTrigger` once. To test the
+deduction without waiting four hours, temporarily lower `ORD_HOLD_HOURS` in a
+test deployment only, or run `processDueOrderAllocations` manually from the
+editor after the hold has passed.
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |

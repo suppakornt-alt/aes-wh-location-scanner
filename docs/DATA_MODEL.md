@@ -245,7 +245,8 @@ ORDs are done is decided only by `MAIN : LOG ORD ที่ยืนยันพ�
 
 ## Sheet: `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`
 
-New sheet. **One row per ORD, keyed by `ord_id`.** The row is overwritten when
+Created automatically by the backend on first use, with the header on row 1.
+**One row per ORD, keyed by `ord_id`.** The row is overwritten when
 the status changes; status history is not kept. It is the source of truth for
 whether an ORD is still available for allocation:
 
@@ -275,7 +276,8 @@ allocation rows that belong to the current submission.
 
 ## Sheet: `MAIN : Log พิกัดจาก ORD`
 
-New sheet. One row per location chosen for a submitted ORD. A SKU split across
+Created automatically by the backend on first use, with the header on row 1.
+One row per location chosen for a submitted ORD. A SKU split across
 two locations produces two rows.
 
 Columns (approved 2026-11-26):
@@ -298,9 +300,9 @@ rows whose `ord_id` and `timestamp` match the ORD's current `PENDING` row.
 
 The timed deduction subtracts `amount` from `QTY` of the matching
 `LOCATION_ID` in `MAIN : ตำแหน่งสินค้าทั้งหมด`, down to a minimum of 0. Each
-deducted location appends one row to `MAIN : Log ข้อมูลตำแหน่ง`, with the
-status row's `user` (the submitter) as the user and a reference containing the
-`ord_id`, `AUTO`, and any shortfall.
+deducted location appends one row to `MAIN : Log ข้อมูลตำแหน่ง` with action
+`เบิกตาม ORD (ORD_PICK)`, the status row's `user` (the submitter) as the user,
+and a reference containing the `ord_id`, `AUTO`, and any shortfall.
 
 Location mapping used by the office workflow:
 

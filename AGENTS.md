@@ -12,8 +12,9 @@ It has two user-facing areas:
   warehouse team.
 
 The application also provides a 3D warehouse view for active stock locations.
-Thai is the primary worker-facing language. Development discussions and code
-documentation are in English unless the project owner asks otherwise.
+Thai is the primary worker-facing language. Always communicate with the project
+owner in English. Thai is reserved for worker-facing application UI, validation,
+and status content unless the project owner explicitly requests otherwise.
 
 ## Scope boundary
 
@@ -194,7 +195,8 @@ filtering, and mobile/desktop layouts.
 The project owner reviews code before pushing or deploying. Do not commit, push,
 or deploy unless explicitly requested.
 
-When the owner asks for handoff, provide Git first:
+After changing any file, always provide two separate synchronization command
+blocks in the final response. Always provide the Git block first:
 
 ```powershell
 git add .
@@ -202,11 +204,25 @@ git commit -m "Describe the change"
 git push
 ```
 
-When backend files changed, then provide:
+Then always provide the Apps Script block separately, even when the change was
+frontend-only:
 
 ```powershell
 clasp.cmd push
 ```
+
+Before giving the handoff, inspect the changed-file list and explicitly report:
+
+```text
+Frontend files changed: YES or NO
+Backend files changed: YES or NO
+```
+
+Frontend files include `index.html`, `pages/`, `js/`, and `css/`. Backend files
+include files under `backend/`. If no frontend files changed, say that there is
+no new frontend change to synchronize to GitHub. If no backend files changed,
+say that there is no Apps Script change and that `clasp.cmd push` is not needed,
+even though the standard clasp command block must still be shown.
 
 `clasp.cmd push` synchronizes files under `backend/` according to `.clasp.json`
 and `.claspignore`. The owner must update the Apps Script web-app deployment to

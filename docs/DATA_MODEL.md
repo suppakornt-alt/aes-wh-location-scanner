@@ -19,8 +19,9 @@ MAIN : ตำแหน่งสินค้าทั้งหมด
 MAIN : Log ข้อมูลตำแหน่ง
     audit trail for pick, add, relocate, close, receive, and Lot edits
 
-Raw ORD data
+DATA : Current ORD
     cleaned ORD lines waiting for office allocation
+    product_code -> SKU_ID
 
 ORD location allocation data
     one row per selected source location and picked quantity
@@ -168,16 +169,93 @@ This is an append-only operational audit log for location quantity and lifecycle
 actions. It is not the source of truth for the current quantity; the main
 location sheet remains the current-state source.
 
+## Sheet: `DATA : Current ORD`
+
+Cleaned ORD lines produced by the existing two-hour Apps Script cleaning cycle
+from the Magic 2002 ERP raw export. This sheet is the input work list for the
+`ออฟฟิศโกดัง` allocation workflow. The office application reads it; it does not
+write to it, because the cleaning cycle may rewrite its contents.
+
+The header starts at physical row 6. Data starts at row 7, matching the other
+`DATA :` sheets.
+
+Current headers:
+
+```text
+order_date
+ord_id
+customer
+product_code
+product_name
+quantity
+weight
+unit
+line_amount_source
+order_subtotal_before_vat
+vat
+order_total
+```
+
+### Field meanings
+
+| Field | Meaning | Used by allocation |
+| --- | --- | --- |
+| `order_date` | ORD document date. | Display and sorting. |
+| `ord_id` | ORD document number. | Groups lines into one ORD commit. |
+| `customer` | Customer on the ORD. | Display only. |
+| `product_code` | Required SKU; matches `SKU_ID` in the location sheet. | Filters location choices. |
+| `product_name` | Product name from the ERP export. | Display only. |
+| `quantity` | Required quantity for this ORD line (the logical `amount`). | Required total for allocation. |
+| `weight` | Line weight from the ERP export. Unit not yet confirmed. | Not used. |
+| `unit` | Unit of measure for `quantity`. | Display only. |
+| `line_amount_source` | Line value carried from the ERP export. Exact meaning to be confirmed. | Not used. |
+| `order_subtotal_before_vat` | ORD subtotal before VAT. Assumed to repeat on every line of the ORD; confirm. | Not used. |
+| `vat` | ORD VAT amount. Assumed ORD-level; confirm. | Not used. |
+| `order_total` | ORD total including VAT. Assumed ORD-level; confirm. | Not used. |
+
+Monetary and weight fields are retained from the source but are not part of the
+stock allocation rules. The allocation workflow must not modify them.
+
+### ORD line identity
+
+The sheet has no line-number column. `ord_id + product_code` is not proven
+unique: the ERP may export the same product more than once in one ORD (for
+example, at different prices). Until the owner confirms one of the following,
+duplicate handling cannot be implemented safely:
+
+- the cleaning cycle guarantees one row per `ord_id + product_code`; or
+- the cleaning cycle adds a stable line identifier (for example `ord_line_no`);
+  or
+- duplicate product rows within one ORD are summed into one requirement.
+
+Sheet row position must not be used as a line identifier, because the cleaning
+cycle can reorder or rewrite the sheet.
+
+### Completion tracking
+
+`DATA : Current ORD` has no allocation-status column. Because the cleaning
+cycle owns this sheet, allocation status must be derived from the allocation
+data (or a separate status sheet), not written back into this sheet. An ORD
+that disappears from or reappears in a later cleaning run must not be deducted
+twice.
+
 ## Office warehouse allocation data
 
 The approved next office workflow is documented in
-`docs/OFFICE_WAREHOUSE.md`. It introduces two logical data sets that are not
-yet confirmed as physical Sheets:
+`docs/OFFICE_WAREHOUSE.md`. It reads ORD lines from `DATA : Current ORD` and
+introduces an allocation data set that is not yet confirmed as a physical Sheet:
 
-- cleaned raw ORD lines with `ord_id`, `product_code`, and `amount`, plus a
-  stable `ord_line_id` when the ERP can repeat a product within one ORD;
 - allocation rows with `ord_line_id`, `ord_id`, `product_code`, `location_id`,
   display `location`, and `pull_off_amount`.
+
+Mapping from `DATA : Current ORD` to the logical ORD fields:
+
+```text
+ord_id        <- ord_id
+product_code  <- product_code
+amount        <- quantity
+ord_line_id   <- UNKNOWN (see "ORD line identity")
+```
 
 One allocation row represents one selected source location. A single SKU may
 therefore produce multiple allocation rows. `location_id` is authoritative;
@@ -215,5 +293,9 @@ are shown separately and are not silently included in frontline quantity.
 - The recovery workflow from `CLEANUP_REQUIRED` back to `ACTIVE` is not yet
   defined.
 - No separate user/role sheet is currently documented for this internal app.
-- The physical raw ORD and allocation sheets, header rows, and stable ORD-line
-  identifier are not yet confirmed for the new office workflow.
+- The stable ORD-line identifier for `DATA : Current ORD` is not yet confirmed.
+- Whether order-level money fields repeat on every ORD line, and the meaning of
+  `line_amount_source` and `weight`, are not yet confirmed.
+- How long ORD lines stay in `DATA : Current ORD` after allocation, and whether
+  the cleaning cycle removes completed ORDs, is not yet confirmed.
+- The physical allocation sheet name and headers are not yet confirmed.

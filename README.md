@@ -27,8 +27,8 @@ Current capabilities:
 - `ออฟฟิศโกดัง` ORD location allocation: administrators choose locations for
   every SKU of an ORD from `DATA : Current ORD`. After a four-hour cancellation
   hold, a timed Apps Script trigger deducts the stock. See
-  `docs/OFFICE_WAREHOUSE.md`. Implemented; release testing (`OFF-*` in the test
-  plan) is still to be run.
+  `docs/OFFICE_WAREHOUSE.md`. Implemented and deployed; release test results
+  (`OFF-*` in the test plan) are still to be recorded.
 
 The planned third area is `ระบบฝากขาย`, a frontline consignment tire registry
 used before products are sent to a customer warehouse. Its authentication must
@@ -68,8 +68,17 @@ Apps Script web-app deployment.
 
 From the repository root:
 
+Windows (PowerShell):
+
 ```powershell
 Get-ChildItem js,backend -Filter *.js -Recurse | ForEach-Object { node --check $_.FullName }
+git diff --check
+```
+
+Ubuntu (bash):
+
+```bash
+find js backend -name '*.js' -exec node --check {} \;
 git diff --check
 ```
 
@@ -90,6 +99,17 @@ Backend synchronization:
 ```powershell
 clasp.cmd push
 ```
+
+On Ubuntu the command is `clasp push`. Ubuntu setup notes:
+
+- Install Node.js with nvm, then `npm install -g @google/clasp`. Do not use
+  `sudo apt install clasp`; that package is an unrelated program.
+- Run `clasp login` with the account that owns the Apps Script project.
+- `.clasp.json` is ignored by Git, so each machine needs its own copy in the
+  repository root with the project's `scriptId` and `"rootDir": "backend"`.
+
+When updating the web app, use Deploy → Manage deployments → Edit → New
+version. A new deployment would change the web-app URL used by `js/api.js`.
 
 After a backend push, update the Apps Script web-app deployment to a new
 version when required. Do not place credentials or deployment URLs in Git or

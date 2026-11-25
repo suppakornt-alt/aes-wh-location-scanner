@@ -3,8 +3,10 @@
 ## Status
 
 This is the first-version scope for the `ออฟฟิศโกดัง` page, agreed with the
-project owner on 2026-11-26 and implemented the same day. Release testing
-(`OFF-*` in `docs/TEST_PLAN.md`) has not been run yet.
+project owner on 2026-11-26 and implemented the same day. On 2026-11-26 the
+owner pushed the backend, installed the deduction trigger, and deployed a new
+web-app version. Release test results (`OFF-*` in `docs/TEST_PLAN.md`) have not
+been recorded yet.
 
 Implementation:
 

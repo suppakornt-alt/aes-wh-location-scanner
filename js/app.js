@@ -75,6 +75,20 @@ function resetSearch() { Warehouse3D.resetSearch(); }
 // ==========================================
 // 5. COMMON UI BUILDERS & LIST RENDERERS
 // ==========================================
+// Translate backend Lot reconciliation codes into compact Thai worker labels.
+function lotStatusBadgeHTML(status) {
+  const labels = {
+    LOT_MATCHED: 'Lot ตรงกับระบบ',
+    LOT_MISMATCHED: 'Lot ไม่ตรงกับระบบ',
+    LOT_NOT_FOUND: 'ไม่พบ Lot ในระบบ',
+    LOT_UNASSIGNED: 'ยังไม่ระบุ Lot'
+  };
+  const normalized = String(status || '').trim().toUpperCase();
+  return labels[normalized]
+    ? `<span class="lot-check-badge lot-check-${normalized.toLowerCase()}">${esc(labels[normalized])}</span>`
+    : '';
+}
+
 function locRowHTML(loc, sku, unit) {
   const currentLot = loc.lotNo ? esc(loc.lotNo) : '';
   const lotLabel = currentLot ? `LOT: ${currentLot}` : `+ ระบุ Lot`;
@@ -94,6 +108,7 @@ function locRowHTML(loc, sku, unit) {
             <svg class="ic" style="width:12px; height:12px;"><use href="#i-edit"/></svg>
             <span class="lot-val">${lotLabel}</span>
           </button>
+          ${lotStatusBadgeHTML(loc.lotCheckStatus)}
         </div>
       </div>
       <div class="action-btn-group">
@@ -104,6 +119,22 @@ function locRowHTML(loc, sku, unit) {
       </div>
     </div>
   `;
+}
+
+// CLEANUP_REQUIRED rows stay read-only and appear below normal locations only
+// when their Lot matches the scanned/manual Lot.
+function cleanupLocRowHTML(loc, unit) {
+  return `
+    <div class="loc-pill-item loc-pill-cleanup">
+      <div class="loc-info">
+        <div>
+          <div class="loc-pill-text">${icon('pin')} ${esc(loc.code || '-')}</div>
+          <div class="loc-meta-sub">Lot ${esc(loc.lotNo || '-')} · ${esc(loc.qty)} ${esc(unit)}</div>
+          ${loc.cleanupReason ? `<div class="loc-cleanup-reason">${esc(loc.cleanupReason)}</div>` : ''}
+        </div>
+      </div>
+      <span class="lot-check-badge lot-check-warning">จำนวนไม่ชัดเจน · รอตรวจสอบ</span>
+    </div>`;
 }
 
 function renderStaffList(list) {
@@ -237,12 +268,16 @@ async function requestCloseLocation(locId, sku, qty, unit) {
       icon: 'question',
       title: 'ปิดพิกัดว่างนี้?',
       text: 'รายการจะถูกเก็บเป็นประวัติ และซ่อนจากหน้าทำงาน',
+      // The owner made CLOSED_REASON optional only for empty-location closes.
+      input: 'textarea',
+      inputLabel: 'เหตุผล (ไม่บังคับ)',
+      inputPlaceholder: 'ระบุเพิ่มเติมได้ หากต้องการ',
       showCancelButton: true,
       confirmButtonText: 'ปิดพิกัด',
       cancelButtonText: 'ยกเลิก'
     });
     if (!result.isConfirmed) return;
-    return closeLocationRecord(locId, 'empty', 'ปิดพิกัดว่าง');
+    return closeLocationRecord(locId, 'empty', String(result.value || '').trim());
   }
 
   const result = await Swal.fire({
@@ -964,12 +999,20 @@ async function handleScannerLookup(lotCode) {
       if (headerEl) headerEl.textContent = `[ไม่พบรหัสสินค้า] | ${data.productName}`;
     }
 
-    renderScannerReconciliation(data.productCode && data.productCode !== '-' ? data.reconciliation : null, data.unit || 'ชิ้น');
+    // Keep SKU reconciliation and the scanned-Lot comparison in one card.
+    const reconciliation = data.reconciliation
+      ? { ...data.reconciliation, lotReconciliation: data.lotReconciliation }
+      : null;
+    renderScannerReconciliation(data.productCode && data.productCode !== '-' ? reconciliation : null, data.unit || 'ชิ้น');
     
     const locList = document.getElementById('scanner-locations-list');
     if (locList) {
-      if (data.locations && data.locations.length > 0) {
-        locList.innerHTML = data.locations.map(l => locRowHTML(l, data.productCode, l.unit)).join('');
+      const activeRows = (data.locations || []).map(l => locRowHTML(l, data.productCode, l.unit)).join('');
+      const cleanupRows = data.cleanupLocations?.length
+        ? `<div class="cleanup-location-heading">พิกัด Lot นี้ที่ต้องตรวจสอบ</div>${data.cleanupLocations.map(l => cleanupLocRowHTML(l, data.unit)).join('')}`
+        : '';
+      if (activeRows || cleanupRows) {
+        locList.innerHTML = `${activeRows}${cleanupRows}`;
       } else {
         locList.innerHTML = '<div class="empty-state" style="padding: 20px;">ไม่พบพิกัดจัดเก็บสำหรับสินค้านี้</div>';
       }
@@ -1014,6 +1057,21 @@ function renderScannerReconciliation(reconciliation, unit) {
     const qty = Number(reconciliation.cleanupQty || 0);
     cleanup.style.display = qty > 0 ? 'block' : 'none';
     cleanup.textContent = qty > 0 ? `มี ${format(qty)} อยู่ในรายการรอตรวจสอบพิกัด (ไม่รวมยอดหน้างาน)` : '';
+  }
+  const lotStatus = document.getElementById('recon-lot-status');
+  if (lotStatus) {
+    const result = reconciliation.lotReconciliation;
+    lotStatus.hidden = !result;
+    if (result) {
+      lotStatus.className = `lot-reconciliation-status lot-check-${String(result.status || '').toLowerCase()}`;
+      const labels = {
+        LOT_MATCHED: 'ยอด Lot หน้างานตรงกับ Remaining',
+        LOT_MISMATCHED: `ยอด Lot ไม่ตรงกัน (ต่าง ${Number(result.difference || 0).toLocaleString('th-TH')})`,
+        LOT_NOT_FOUND: 'ไม่พบ Lot นี้ใน Stock By Lot',
+        LOT_UNASSIGNED: 'Lot ยังไม่ถูกระบุ'
+      };
+      lotStatus.textContent = labels[result.status] || 'ไม่สามารถตรวจสอบยอด Lot ได้';
+    }
   }
   card.style.display = 'block';
 }

@@ -25,13 +25,14 @@ let holdHours = 4;
 // sku = { productCode, productName, unit, requiredQty, rows: [{ id, locationId, amount }] }
 let current = null;
 let choices = {};       // productCode -> [{ locationId, location, lotNo, qty }]
+let lotChoices = {};    // productCode -> [{ lotNo, remaining }] from Stock By Lot
 let productMeta = {};   // productCode -> { unit, brand, type } for the add-location form
 let addLocSku = null;   // SKU the add-location modal is open for
 let submitting = false;
 
 let uid = 0;
 const nextId = () => ++uid;
-const newRow = () => ({ id: nextId(), locationId: '', amount: '' });
+const newRow = () => ({ id: nextId(), locationId: '', lotNo: '', amount: '' });
 
 // Quantities are compared after rounding so decimal units (e.g. litres)
 // do not fail exact-total checks because of floating-point noise.
@@ -149,6 +150,7 @@ async function openOrder(ordId) {
     skus: order.lines.map(line => ({ ...line, rows: [newRow()] }))
   };
   choices = {};
+  lotChoices = {};
   productMeta = {};
 
   showLoading('กำลังโหลดพิกัด...');
@@ -189,13 +191,14 @@ async function loadChoices(productCodes) {
     return false;
   }
   Object.assign(choices, res.data.choices || {});
+  Object.assign(lotChoices, res.data.lots || {});
   Object.assign(productMeta, res.data.meta || {});
   return true;
 }
 
 const findSku = (code) => current?.skus.find(s => s.productCode === code);
 const findChoice = (code, locationId) => (choices[code] || []).find(c => c.locationId === locationId);
-const isBlankRow = (row) => !row.locationId && !row.amount;
+const isBlankRow = (row) => !row.locationId && !row.lotNo && !row.amount;
 
 // Per-row validation. Returns '' when the row is valid or completely blank.
 function rowError(sku, row) {
@@ -203,6 +206,11 @@ function rowError(sku, row) {
   if (!row.locationId) return 'กรุณาเลือกพิกัด';
   const choice = findChoice(sku.productCode, row.locationId);
   if (!choice) return 'พิกัดนี้ไม่พร้อมใช้งานแล้ว กรุณาเลือกใหม่';
+  const effectiveLot = choice.lotNo || row.lotNo;
+  if (!effectiveLot) return 'กรุณาเลือก Lot จาก Stock By Lot';
+  if (!choice.lotNo && !(lotChoices[sku.productCode] || []).some(option => option.lotNo === row.lotNo)) {
+    return 'Lot นี้ไม่มียอดคงเหลือใน Stock By Lot แล้ว กรุณาเลือกใหม่';
+  }
   const amount = Number(row.amount);
   if (!row.amount || !(amount > 0)) return 'กรุณากรอกจำนวนที่เบิก';
   // Admin must not pick more than the location shows; fix the location first.
@@ -235,6 +243,26 @@ function locationOptionsHTML(sku, row) {
   return `<option value="">— เลือกพิกัด —</option>${missing}${options}`;
 }
 
+// Existing State Lots are immutable in the office flow. A blank State row
+// receives a controlled dropdown sourced from positive Stock By Lot Remaining.
+function lotControlHTML(sku, row) {
+  const choice = findChoice(sku.productCode, row.locationId);
+  if (choice?.lotNo) {
+    return `<div class="of-lot-fixed" title="Lot ปัจจุบันของพิกัด">Lot ${esc(choice.lotNo)}</div>`;
+  }
+  const list = lotChoices[sku.productCode] || [];
+  const options = list.map(option => `
+    <option value="${esc(option.lotNo)}" ${option.lotNo === row.lotNo ? 'selected' : ''}>
+      Lot ${esc(option.lotNo)} · คงเหลือ ${esc(fmtQty(option.remaining))}
+    </option>`).join('');
+  const placeholder = list.length ? '— เลือก Lot —' : 'ไม่พบ Lot ที่มียอดคงเหลือ';
+  return `
+    <select class="of-input of-lot-control" data-field="lot" data-sku="${esc(sku.productCode)}" data-row="${row.id}"
+            aria-label="Lot จาก Stock By Lot" ${choice && list.length ? '' : 'disabled'}>
+      <option value="">${placeholder}</option>${options}
+    </select>`;
+}
+
 function rowHTML(sku, row) {
   const error = rowError(sku, row);
   const canTopUp = Boolean(findChoice(sku.productCode, row.locationId));
@@ -243,6 +271,7 @@ function rowHTML(sku, row) {
       <select class="of-input ${error && !row.locationId ? 'invalid' : ''}" data-field="location" data-sku="${esc(sku.productCode)}" data-row="${row.id}" aria-label="พิกัด">
         ${locationOptionsHTML(sku, row)}
       </select>
+      ${lotControlHTML(sku, row)}
       <input type="text" class="of-input ${error && row.locationId ? 'invalid' : ''}" data-field="amount" data-sku="${esc(sku.productCode)}" data-row="${row.id}"
              value="${esc(row.amount)}" inputmode="decimal" placeholder="จำนวน" autocomplete="off" aria-label="จำนวนที่เบิก" />
       <button type="button" class="btn btn-outline btn-sm" data-act="top-up" data-sku="${esc(sku.productCode)}" data-row="${row.id}" ${canTopUp ? '' : 'disabled'} title="เติมจำนวนให้พิกัดนี้">เติม</button>
@@ -310,6 +339,7 @@ function refreshSkuStatus(sku) {
       box.hidden = !error;
     }
     card.querySelector(`[data-field="amount"][data-row="${row.id}"]`)?.classList.toggle('invalid', Boolean(error && row.locationId));
+    card.querySelector(`[data-field="lot"][data-row="${row.id}"]`)?.classList.toggle('invalid', Boolean(error && error.includes('Lot')));
   });
   updateSubmitBar();
 }
@@ -484,7 +514,13 @@ function buildSubmitPayload() {
   const allocations = [];
   current.skus.forEach(sku => {
     sku.rows.filter(r => !isBlankRow(r)).forEach(r => {
-      allocations.push({ productCode: sku.productCode, locationId: r.locationId, amount: Number(r.amount) });
+      const choice = findChoice(sku.productCode, r.locationId);
+      allocations.push({
+        productCode: sku.productCode,
+        locationId: r.locationId,
+        lotNo: choice?.lotNo || r.lotNo,
+        amount: Number(r.amount)
+      });
     });
   });
   return { ordId: current.ordId, lines, allocations };
@@ -493,14 +529,15 @@ function buildSubmitPayload() {
 function confirmTableHTML() {
   const rows = current.skus.flatMap(sku => sku.rows.filter(r => !isBlankRow(r)).map(r => {
     const choice = findChoice(sku.productCode, r.locationId);
-    return `<tr><td>${esc(sku.productCode)}</td><td>${esc(choice?.location || '-')}</td><td class="num">${esc(fmtQty(r.amount))} ${esc(sku.unit)}</td></tr>`;
+    const lotNo = choice?.lotNo || r.lotNo;
+    return `<tr><td>${esc(sku.productCode)}</td><td>${esc(choice?.location || '-')}</td><td>${esc(lotNo || '-')}</td><td class="num">${esc(fmtQty(r.amount))} ${esc(sku.unit)}</td></tr>`;
   })).join('');
   return `
     <div class="of-swal-text">
       <div><strong>${esc(current.ordId)}</strong> · ${esc(current.customer || '-')}</div>
       <div class="of-swal-note">ระบบจะตัดสต็อกอัตโนมัติหลังยืนยัน ${esc(holdHours)} ชั่วโมง ระหว่างนี้ยกเลิกได้ที่เมนู "รอตัดสต็อก"</div>
       <table class="of-confirm-table">
-        <thead><tr><th>รหัสสินค้า</th><th>พิกัด</th><th class="num">จำนวน</th></tr></thead>
+        <thead><tr><th>รหัสสินค้า</th><th>พิกัด</th><th>Lot</th><th class="num">จำนวน</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -562,8 +599,9 @@ function renderPendingList() {
   const badge = document.getElementById('pending-count');
   badge.textContent = String(pending.length);
   badge.hidden = pending.length === 0;
+  const exceptionCount = pending.filter(item => item.status === 'EXCEPTION').length;
   document.getElementById('pending-summary').textContent =
-    `${pending.length} ORD รอตัดสต็อก (ตัดอัตโนมัติหลังยืนยัน ${holdHours} ชั่วโมง)`;
+    `${pending.length} ORD รอตัดสต็อก${exceptionCount ? ` · ต้องตรวจสอบ ${exceptionCount}` : ''} (ตัดอัตโนมัติหลังยืนยัน ${holdHours} ชั่วโมง)`;
 
   const host = document.getElementById('pending-list');
   if (!pending.length) {
@@ -571,17 +609,22 @@ function renderPendingList() {
     return;
   }
 
-  host.innerHTML = pending.map(p => `
-    <div class="of-card of-ord-card">
+  host.innerHTML = pending.map(p => {
+    const isException = p.status === 'EXCEPTION';
+    return `
+    <div class="of-card of-ord-card ${isException ? 'of-pending-exception' : ''}">
       <div class="of-ord-main">
         <div class="of-ord-title">${esc(p.ordId)}</div>
         <div class="of-ord-meta">${esc(p.customer || '-')}</div>
         <div class="of-ord-meta">ยืนยันโดย ${esc(p.user)} · ${esc(p.submittedAt)}</div>
-        <div class="of-due">${icon('clock')}<span>ตัดสต็อกประมาณ ${esc(p.dueAt)}</span></div>
+        ${isException
+          ? `<div class="of-pending-error">ต้องตรวจสอบ: ${esc(p.message || 'ข้อมูลพิกัดหรือ Lot เปลี่ยนระหว่างรอตัดสต็อก')}</div>`
+          : `<div class="of-due">${icon('clock')}<span>ตัดสต็อกประมาณ ${esc(p.dueAt)}</span></div>`}
       </div>
       <button type="button" class="btn btn-outline of-btn-danger" data-act="cancel-pending" data-ord="${esc(p.ordId)}">ยกเลิก</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 async function cancelPending(ordId) {
@@ -647,14 +690,22 @@ function wireEvents() {
     else if (act === 'new-location') openAddLocation(sku);
   });
 
-  // Choosing a location re-renders so the other rows' options update.
+  // Choosing a location also resets the row Lot to the location's fixed Lot;
+  // blank locations must choose a controlled Stock By Lot option afterward.
   skuHost.addEventListener('change', e => {
     const el = e.target;
-    if (el.dataset.field !== 'location') return;
-    const row = findSku(el.dataset.sku)?.rows.find(r => r.id === Number(el.dataset.row));
+    if (el.dataset.field !== 'location' && el.dataset.field !== 'lot') return;
+    const sku = findSku(el.dataset.sku);
+    const row = sku?.rows.find(r => r.id === Number(el.dataset.row));
     if (!row) return;
-    row.locationId = el.value;
-    renderAllocation();
+    if (el.dataset.field === 'location') {
+      row.locationId = el.value;
+      row.lotNo = findChoice(sku.productCode, el.value)?.lotNo || '';
+      renderAllocation();
+      return;
+    }
+    row.lotNo = el.value;
+    refreshSkuStatus(sku);
   });
 
   // Typing an amount only refreshes status so the keyboard stays open.

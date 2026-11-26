@@ -21,6 +21,25 @@ const LOCATION_STATUS = Object.freeze({
   CLEANUP_REQUIRED: 'CLEANUP_REQUIRED'
 });
 
+// Lot reconciliation is independent from LOCATION_STATUS and the owner's
+// existing STATUS XLOOKUP column. These values describe only ACTIVE rows.
+const LOT_CHECK_STATUS = Object.freeze({
+  UNASSIGNED: 'LOT_UNASSIGNED',
+  MATCHED: 'LOT_MATCHED',
+  MISMATCHED: 'LOT_MISMATCHED',
+  NOT_FOUND: 'LOT_NOT_FOUND'
+});
+
+const LOT_RECONCILIATION_HEADERS = [
+  'PRODUCT_CODE',
+  'LOT_NO',
+  'STATE_ACTIVE_QTY',
+  'STOCK_BY_LOT_REMAINING',
+  'DIFFERENCE',
+  'LOT_CHECK_STATUS',
+  'CHECKED_AT'
+];
+
 function getLocationStatus(row, columnMap) {
   return String(getColumnValue(row, columnMap, 'LOCATION_STATUS', '') || '')
     .trim()
@@ -45,12 +64,275 @@ function setLocationLifecycle(sheet, sheetRow, status, userEmail, reason) {
   setValueByHeader(sheet, sheetRow, columns, 'CLOSED_AT', isActive ? '' : new Date());
   setValueByHeader(sheet, sheetRow, columns, 'CLOSED_BY', isActive ? '' : userEmail);
   setValueByHeader(sheet, sheetRow, columns, 'CLOSED_REASON', isActive ? '' : String(reason || ''));
+  // Non-active rows are excluded from Lot reconciliation, so their derived
+  // Lot status must not remain visible as if it were current.
+  if (!isActive) setValueByHeader(sheet, sheetRow, columns, 'LOT_CHECK_STATUS', '');
 }
 
 function appendActiveLocationRow(sheet, rowValues, userEmail) {
   const sheetRow = appendRowAtRealLastRow(sheet, rowValues);
   setLocationLifecycle(sheet, sheetRow, LOCATION_STATUS.ACTIVE, userEmail, '');
+  // New blank-Lot rows are immediately visible as unassigned; populated Lots
+  // are reconciled by the mutation that created them.
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const columns = getColumnIndexMap(headers);
+  if (!String(rowValues[3] || '').trim()) {
+    setValueByHeader(sheet, sheetRow, columns, 'LOT_CHECK_STATUS', LOT_CHECK_STATUS.UNASSIGNED);
+  }
   return sheetRow;
+}
+
+function roundWarehouseQty(value) {
+  return Math.round(Number(value) * 10000) / 10000;
+}
+
+function parseWarehouseQty(value) {
+  const parsed = Number(String(value ?? '').replace(/,/g, '').trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function lotReconciliationKey(productCode, lotNo) {
+  return `${String(productCode || '').trim()}\u0001${String(lotNo || '').trim()}`;
+}
+
+// Stock By Lot may contain repeated rows for one product/Lot. The office
+// dropdown and reconciliation use their summed current Remaining quantity.
+function readStockByLotRemainingMap(ss, requestedProductCodes) {
+  const result = new Map();
+  const sheet = ss.getSheetByName(CONFIG.SHEET_LOT);
+  if (!sheet) return result;
+
+  const values = sheet.getDataRange().getDisplayValues();
+  const headerIndex = CONFIG.LOT_HEADER_ROW - 1;
+  const columns = getColumnIndexMap(values[headerIndex] || []);
+  ['PRODUCT CODE', 'LOT NO.', 'REMAINING'].forEach(header => {
+    if (columns[header] === undefined) {
+      throw new Error(`ชีต ${CONFIG.SHEET_LOT} ไม่มีคอลัมน์ ${header}`);
+    }
+  });
+
+  for (let i = headerIndex + 1; i < values.length; i++) {
+    const productCode = String(getColumnValue(values[i], columns, 'PRODUCT CODE', '')).trim();
+    const lotNo = String(getColumnValue(values[i], columns, 'LOT NO.', '')).trim();
+    if (!productCode || !lotNo) continue;
+    if (requestedProductCodes && !requestedProductCodes.has(productCode)) continue;
+
+    const key = lotReconciliationKey(productCode, lotNo);
+    const existing = result.get(key) || { productCode: productCode, lotNo: lotNo, remaining: 0 };
+    existing.remaining = roundWarehouseQty(existing.remaining + parseWarehouseQty(
+      getColumnValue(values[i], columns, 'REMAINING', 0)
+    ));
+    result.set(key, existing);
+  }
+  return result;
+}
+
+// Only positive Remaining Lots are valid choices for assigning a blank State
+// row from the office page. Values stay as strings to preserve leading zeroes.
+function getPositiveLotChoicesByProduct(ss, productCodes) {
+  const grouped = {};
+  productCodes.forEach(code => { grouped[code] = []; });
+  readStockByLotRemainingMap(ss, productCodes).forEach(entry => {
+    if (entry.remaining > 0 && grouped[entry.productCode]) {
+      grouped[entry.productCode].push({ lotNo: entry.lotNo, remaining: entry.remaining });
+    }
+  });
+  Object.keys(grouped).forEach(code => {
+    grouped[code].sort((a, b) => a.lotNo.localeCompare(b.lotNo, undefined, { numeric: true }));
+  });
+  return grouped;
+}
+
+// Calculates the current Lot result without mutating Sheets. CLEANUP_REQUIRED
+// and INACTIVE_EMPTY rows are intentionally excluded from STATE_ACTIVE_QTY.
+function getLotReconciliationSnapshot(ss, productCode, lotNo) {
+  const cleanProductCode = String(productCode || '').trim();
+  const cleanLotNo = String(lotNo || '').trim();
+  if (!cleanLotNo) {
+    return {
+      productCode: cleanProductCode,
+      lotNo: '',
+      stateActiveQty: 0,
+      stockByLotRemaining: 0,
+      difference: 0,
+      status: LOT_CHECK_STATUS.UNASSIGNED
+    };
+  }
+
+  const stateSheet = ss.getSheetByName(CONFIG.SHEET_STATE);
+  if (!stateSheet) throw new Error(`ไม่พบชีต ${CONFIG.SHEET_STATE}`);
+  const stateValues = stateSheet.getDataRange().getValues();
+  const stateColumns = getColumnIndexMap(stateValues[0] || []);
+  let stateActiveQty = 0;
+  for (let i = 1; i < stateValues.length; i++) {
+    const row = stateValues[i];
+    if (!isActiveLocationRow(row, stateColumns)) continue;
+    if (String(getColumnValue(row, stateColumns, 'SKU_ID', '')).trim() !== cleanProductCode) continue;
+    if (String(getColumnValue(row, stateColumns, 'LOT_NO', '')).trim() !== cleanLotNo) continue;
+    stateActiveQty += Number(getColumnValue(row, stateColumns, 'QTY', 0)) || 0;
+  }
+  stateActiveQty = roundWarehouseQty(stateActiveQty);
+
+  const remainingEntry = readStockByLotRemainingMap(ss, new Set([cleanProductCode]))
+    .get(lotReconciliationKey(cleanProductCode, cleanLotNo));
+  const stockByLotRemaining = remainingEntry ? roundWarehouseQty(remainingEntry.remaining) : 0;
+  const difference = roundWarehouseQty(stateActiveQty - stockByLotRemaining);
+  const status = !remainingEntry
+    ? LOT_CHECK_STATUS.NOT_FOUND
+    : difference === 0 ? LOT_CHECK_STATUS.MATCHED : LOT_CHECK_STATUS.MISMATCHED;
+
+  return {
+    productCode: cleanProductCode,
+    lotNo: cleanLotNo,
+    stateActiveQty: stateActiveQty,
+    stockByLotRemaining: stockByLotRemaining,
+    difference: difference,
+    status: status
+  };
+}
+
+function getLotReconciliationLogSheet(ss) {
+  let sheet = ss.getSheetByName(CONFIG.SHEET_LOT_RECONCILIATION);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.SHEET_LOT_RECONCILIATION);
+    sheet.getRange(1, 1, 1, LOT_RECONCILIATION_HEADERS.length).setValues([LOT_RECONCILIATION_HEADERS]);
+  }
+  const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), LOT_RECONCILIATION_HEADERS.length))
+    .getValues()[0];
+  const columns = getColumnIndexMap(headers);
+  const missing = LOT_RECONCILIATION_HEADERS.filter(header => columns[header] === undefined);
+  if (missing.length) {
+    throw new Error(`ชีต ${CONFIG.SHEET_LOT_RECONCILIATION} ไม่มีคอลัมน์: ${missing.join(', ')}`);
+  }
+  return { sheet: sheet, columns: columns, width: headers.length };
+}
+
+// Writes the latest status back to every matching ACTIVE State row and appends
+// a snapshot to the owner's Lot-comparison log for later investigation.
+function reconcileLotPair(ss, productCode, lotNo) {
+  const snapshot = getLotReconciliationSnapshot(ss, productCode, lotNo);
+  const stateSheet = ss.getSheetByName(CONFIG.SHEET_STATE);
+  const values = stateSheet.getDataRange().getValues();
+  const columns = getColumnIndexMap(values[0] || []);
+  const statusColumn = columns.LOT_CHECK_STATUS;
+  if (statusColumn === undefined) {
+    throw new Error(`ชีต ${CONFIG.SHEET_STATE} ไม่มีคอลัมน์ LOT_CHECK_STATUS`);
+  }
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const sameProduct = String(getColumnValue(row, columns, 'SKU_ID', '')).trim() === snapshot.productCode;
+    const sameLot = String(getColumnValue(row, columns, 'LOT_NO', '')).trim() === snapshot.lotNo;
+    if (sameProduct && sameLot && isActiveLocationRow(row, columns)) {
+      stateSheet.getRange(i + 1, statusColumn + 1).setValue(snapshot.status);
+    }
+  }
+
+  if (snapshot.lotNo) {
+    const log = getLotReconciliationLogSheet(ss);
+    const record = {
+      PRODUCT_CODE: snapshot.productCode,
+      LOT_NO: snapshot.lotNo,
+      STATE_ACTIVE_QTY: snapshot.stateActiveQty,
+      STOCK_BY_LOT_REMAINING: snapshot.stockByLotRemaining,
+      DIFFERENCE: snapshot.difference,
+      LOT_CHECK_STATUS: snapshot.status,
+      CHECKED_AT: new Date()
+    };
+    const output = new Array(log.width).fill('');
+    Object.keys(record).forEach(header => { output[log.columns[header]] = record[header]; });
+    log.sheet.getRange(log.sheet.getLastRow() + 1, 1, 1, log.width).setValues([output]);
+  }
+  return snapshot;
+}
+
+// Run once after deploying this feature to initialize current State statuses
+// and create baseline reconciliation snapshots for every ACTIVE SKU/Lot pair.
+function rebuildLotReconciliation() {
+  const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
+  const sheet = ss.getSheetByName(CONFIG.SHEET_STATE);
+  if (!sheet) throw new Error(`ไม่พบชีต ${CONFIG.SHEET_STATE}`);
+  const values = sheet.getDataRange().getValues();
+  const columns = getColumnIndexMap(values[0] || []);
+  const statusColumn = columns.LOT_CHECK_STATUS;
+  if (statusColumn === undefined) throw new Error(`ชีต ${CONFIG.SHEET_STATE} ไม่มีคอลัมน์ LOT_CHECK_STATUS`);
+
+  // Build every pair and its ACTIVE quantity from one State read so the
+  // one-time initializer remains practical for a large warehouse sheet.
+  const pairs = new Map();
+  const statusValues = [];
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if (!isActiveLocationRow(row, columns)) {
+      statusValues.push(['']);
+      continue;
+    }
+    const productCode = String(getColumnValue(row, columns, 'SKU_ID', '')).trim();
+    const lotNo = String(getColumnValue(row, columns, 'LOT_NO', '')).trim();
+    if (!lotNo) {
+      statusValues.push([LOT_CHECK_STATUS.UNASSIGNED]);
+      continue;
+    }
+    const key = lotReconciliationKey(productCode, lotNo);
+    const pair = pairs.get(key) || { productCode: productCode, lotNo: lotNo, stateActiveQty: 0 };
+    pair.stateActiveQty = roundWarehouseQty(
+      pair.stateActiveQty + parseWarehouseQty(getColumnValue(row, columns, 'QTY', 0))
+    );
+    pairs.set(key, pair);
+    statusValues.push(['']);
+  }
+
+  // Compare every pair against one Stock By Lot map, then prepare State and
+  // append-only log output in memory before issuing the two batch writes.
+  const stockMap = readStockByLotRemainingMap(ss, new Set(Array.from(pairs.values()).map(pair => pair.productCode)));
+  const snapshots = new Map();
+  pairs.forEach((pair, key) => {
+    const remainingEntry = stockMap.get(key);
+    const stockByLotRemaining = remainingEntry ? roundWarehouseQty(remainingEntry.remaining) : 0;
+    const difference = roundWarehouseQty(pair.stateActiveQty - stockByLotRemaining);
+    snapshots.set(key, {
+      productCode: pair.productCode,
+      lotNo: pair.lotNo,
+      stateActiveQty: pair.stateActiveQty,
+      stockByLotRemaining: stockByLotRemaining,
+      difference: difference,
+      status: !remainingEntry
+        ? LOT_CHECK_STATUS.NOT_FOUND
+        : difference === 0 ? LOT_CHECK_STATUS.MATCHED : LOT_CHECK_STATUS.MISMATCHED
+    });
+  });
+
+  for (let i = 1; i < values.length; i++) {
+    if (!isActiveLocationRow(values[i], columns)) continue;
+    const productCode = String(getColumnValue(values[i], columns, 'SKU_ID', '')).trim();
+    const lotNo = String(getColumnValue(values[i], columns, 'LOT_NO', '')).trim();
+    if (!lotNo) continue;
+    statusValues[i - 1][0] = snapshots.get(lotReconciliationKey(productCode, lotNo)).status;
+  }
+  if (statusValues.length) {
+    sheet.getRange(2, statusColumn + 1, statusValues.length, 1).setValues(statusValues);
+  }
+
+  if (snapshots.size) {
+    const log = getLotReconciliationLogSheet(ss);
+    const checkedAt = new Date();
+    const logRows = Array.from(snapshots.values()).map(snapshot => {
+      const record = {
+        PRODUCT_CODE: snapshot.productCode,
+        LOT_NO: snapshot.lotNo,
+        STATE_ACTIVE_QTY: snapshot.stateActiveQty,
+        STOCK_BY_LOT_REMAINING: snapshot.stockByLotRemaining,
+        DIFFERENCE: snapshot.difference,
+        LOT_CHECK_STATUS: snapshot.status,
+        CHECKED_AT: checkedAt
+      };
+      const output = new Array(log.width).fill('');
+      Object.keys(record).forEach(header => { output[log.columns[header]] = record[header]; });
+      return output;
+    });
+    log.sheet.getRange(log.sheet.getLastRow() + 1, 1, logRows.length, log.width).setValues(logRows);
+  }
+  return { success: true, reconciledPairs: pairs.size };
 }
 
 function getWarehouse3DData() {

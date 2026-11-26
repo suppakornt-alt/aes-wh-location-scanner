@@ -81,6 +81,10 @@ ACTIVE -> CLEANUP_REQUIRED     when a non-empty location is invalid/questionable
 - `INACTIVE_EMPTY` and `CLEANUP_REQUIRED` are excluded from normal operations,
   scanner location lists, and 3D rendering.
 - Cleanup rows preserve their quantity, timestamp, user, and reason.
+- The empty-location close reason is optional. A non-empty cleanup action still
+  requires a reason because its quantity is being preserved for investigation.
+- When a scanned or manually entered Lot exactly matches a cleanup row's
+  `LOT_NO`, that row appears below active rows in red and remains read-only.
 - `CLEANUP_REQUIRED -> ACTIVE` is a future workflow and is intentionally not
   changed in the current implementation.
 - Normal worker actions must never physically delete a location row.
@@ -106,8 +110,22 @@ erpQty       = Current Stock sum
 difference   = frontlineQty - erpQty
 ```
 
-`CLEANUP_REQUIRED` quantity is displayed separately so questionable records are
-not silently counted as confirmed frontline stock.
+For a Lot lookup, exact-Lot `CLEANUP_REQUIRED` quantity is displayed separately
+so questionable records are not silently counted as confirmed frontline stock.
+
+Lot reconciliation is separate from SKU-wide ERP reconciliation:
+
+```text
+State active Lot quantity = sum QTY for ACTIVE rows with SKU_ID + LOT_NO
+Stock By Lot quantity     = sum Remaining for Product Code + Lot No.
+difference                = State active Lot quantity - Stock By Lot quantity
+```
+
+Only active/legacy-blank lifecycle rows participate. Blank Lots are
+`LOT_UNASSIGNED`; equal quantities are `LOT_MATCHED`; a nonzero difference is
+`LOT_MISMATCHED`; and a missing Stock By Lot pair is `LOT_NOT_FOUND`. The
+backend writes the latest result to `LOT_CHECK_STATUS` and appends a snapshot
+to `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ`.
 
 ## Audit logging
 
@@ -124,26 +142,37 @@ key rules are:
 - Input is `DATA : Current ORD` (header row 6). The app never writes to it.
 - Rows with the same `ord_id + product_code` are merged into one SKU
   requirement by summing `quantity`.
-- An ORD is hidden from the list while it has a `PENDING` or `COMPLETED` entry
-  in `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`. `CANCELED` returns it to the list.
-- The admin chooses locations, not Lots. Choices are `ACTIVE` rows with
-  `QTY > 0` and a matching `SKU_ID`. One SKU may be split across locations; each
-  location is one row in `MAIN : Log พิกัดจาก ORD`.
+- An ORD is hidden from the allocation list while it has a `PENDING`,
+  `COMPLETED`, or `EXCEPTION` entry in
+  `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`. `CANCELED` returns it to the list.
+- The admin chooses locations. Choices are `ACTIVE` rows with `QTY > 0` and a
+  matching `SKU_ID`. One SKU may be split across locations; each location is
+  one row in `MAIN : Log พิกัดจาก ORD`.
+- A selected row's existing Lot is authoritative and read-only. If its Lot is
+  blank, the admin must choose from a dropdown containing only that SKU's Lots
+  with positive summed `Remaining` in `DATA : Stock By Lot`. Arbitrary Lot text
+  is not accepted in the ORD allocation screen.
 - A chosen quantity must be positive and must not exceed the location's current
   `QTY`. If the real location holds more, or is missing, the admin first fixes
   the location data from the office page (`add` or `assign`).
 - The whole ORD is submitted at once. Every SKU must be allocated exactly.
   Submit writes all rows in one batch under `LockService`, or writes nothing.
 - Submit does not deduct stock. The ORD becomes `PENDING` for four hours.
+- The saved allocation includes the confirmed Lot. Canceling before deduction
+  changes no State Lot or quantity.
 - Any authorized user can cancel a `PENDING` ORD (`CANCELED`, no stock change).
   A `PENDING` ORD cannot be edited; cancel and redo it.
 - A time-driven trigger runs every 15 minutes and deducts ORDs that have been
-  `PENDING` for at least four hours, then marks them `COMPLETED`.
+  `PENDING` for at least four hours. For a still-blank State row, the saved Lot
+  is assigned to the entire row immediately before the ORD quantity is deducted.
+- If the location became inactive or its Lot changed to a conflicting value,
+  the whole ORD becomes `EXCEPTION` and no allocation is deducted. Cancel and
+  redo the ORD after correcting the data.
 - If a location holds less than the chosen quantity at deduction time, it is
   deducted to 0 and the shortfall is logged. A location at 0 becomes
   `INACTIVE_EMPTY`.
-- A repeated submit for an ORD that is already `PENDING` or `COMPLETED` is
-  rejected, which makes double-clicks and network retries safe.
+- A repeated submit for an ORD that is already `PENDING`, `COMPLETED`, or
+  `EXCEPTION` is rejected, which makes double-clicks and network retries safe.
 - There is no undo after `COMPLETED`. Staff restore stock with the normal `add`
   action.
 - No extra roles: every authorized user can use the office workflow.
@@ -173,7 +202,8 @@ cancelOrderAllocation
 `assign` creates a new location row and is logged as `รับเข้า (RECEIVE)`.
 `add` resolves its columns by header name.
 
-The four office actions never deduct stock. The timed deduction is the
+The four office actions never deduct ORD stock. The `add` action still increases
+location quantity immediately and independently. The timed deduction is the
 `processDueOrderAllocations` trigger (not an API action) and is logged as
 `เบิกตาม ORD (ORD_PICK)`.
 

@@ -72,6 +72,21 @@ Backend responsibilities are split as follows:
    the safe location-close and cleanup workflow.
 9. Active stock is available to the 3D view and normal operations list.
 
+The office ORD workflow has a separate timing rule:
+
+1. The admin selects active locations and quantities for the whole ORD.
+2. An existing State Lot is read-only. For a blank State Lot, the admin must
+   choose from positive summed `Remaining` Lots for that SKU in
+   `DATA : Stock By Lot`; arbitrary Lot text is not accepted.
+3. Submit stores `lot_no` with the allocation but changes no State Lot or
+   quantity during the four-hour cancellation hold.
+4. At finalization, a still-blank State row receives the saved Lot for the
+   entire row, then only the allocated ORD quantity is deducted.
+5. An inactive location or conflicting nonblank Lot changes the whole ORD to
+   `EXCEPTION`; no allocation is deducted. Cancel and redo it.
+6. The office `เติม` action remains an immediate quantity increase and is not
+   delayed by the ORD hold.
+
 ## Data model and invariants
 
 The location sheet is `MAIN : ตำแหน่งสินค้าทั้งหมด` with these columns:
@@ -79,12 +94,20 @@ The location sheet is `MAIN : ตำแหน่งสินค้าทั้�
 ```text
 LOCATION_ID SKU_ID NAME LOT_NO CATEGORY BRAND QTY COL_NAME_START COL_NAME_END
 COL_START COL_END ROW_START ROW_END MIN_LEVEL MAX_LEVEL DISPLAY_LOC
-LOCATION_STATUS CLOSED_AT CLOSED_BY CLOSED_REASON LATEST_SALES DIFF_DAYS CRITERIA STATUS
+LOCATION_STATUS CLOSED_AT CLOSED_BY CLOSED_REASON LOT_CHECK_STATUS
+LATEST_SALES DIFF_DAYS CRITERIA STATUS
 ```
 
 `LATEST_SALES`, `DIFF_DAYS`, `CRITERIA`, and `STATUS` are lookup/formula fields.
 They remain after the operational location/lifecycle fields. Backend code must
 resolve movable fields by header name instead of assuming fixed indexes.
+
+`LOT_CHECK_STATUS` is a backend-maintained derived field for ACTIVE rows. It is
+calculated per `SKU_ID + LOT_NO` against summed `Remaining` in
+`DATA : Stock By Lot`; do not reuse the owner's existing `STATUS` XLOOKUP.
+Each refresh appends a snapshot to
+`MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ`. Reconciliation excludes
+`INACTIVE_EMPTY` and `CLEANUP_REQUIRED` quantities.
 
 Blank `LOCATION_STATUS` is treated as `ACTIVE` for backward compatibility. New
 or reactivated rows should explicitly contain `ACTIVE`.
@@ -95,6 +118,10 @@ Valid lifecycle statuses:
 - `INACTIVE_EMPTY`: intentionally closed after quantity reaches zero.
 - `CLEANUP_REQUIRED`: questionable location whose quantity is preserved for
   investigation and excluded from the normal active total.
+
+For scanner/manual Lot lookup, show only `CLEANUP_REQUIRED` rows whose
+`LOT_NO` exactly matches the searched Lot. Place them below active rows in red
+and keep them read-only.
 
 Do not physically delete location rows during normal worker operations. Preserve
 the row and audit information. Any purge must be a separately reviewed action.

@@ -25,11 +25,15 @@ DATA : Current ORD
     product_code -> SKU_ID
 
 MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว
-    one row per submitted ORD and its status (PENDING / COMPLETED / CANCELED)
+    one row per submitted ORD and its status
+    (PENDING / COMPLETED / CANCELED / EXCEPTION)
 
 MAIN : Log พิกัดจาก ORD
     one row per location chosen for a submitted ORD
     location_id -> LOCATION_ID
+
+MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ
+    append-only SKU + Lot reconciliation snapshots
 ```
 
 The backend resolves a scanned or entered Lot through `DATA : Stock By Lot`,
@@ -61,6 +65,7 @@ LOCATION_STATUS
 CLOSED_AT
 CLOSED_BY
 CLOSED_REASON
+LOT_CHECK_STATUS
 LATEST_SALES
 DIFF_DAYS
 CRITERIA
@@ -87,6 +92,7 @@ STATUS
 | `CLOSED_AT` | Timestamp for a closed or cleanup-marked row. |
 | `CLOSED_BY` | Authenticated account that changed the lifecycle state. |
 | `CLOSED_REASON` | Reason recorded for closing or cleanup. |
+| `LOT_CHECK_STATUS` | Backend-derived ACTIVE-row Lot result: `LOT_UNASSIGNED`, `LOT_MATCHED`, `LOT_MISMATCHED`, or `LOT_NOT_FOUND`. |
 | `LATEST_SALES` | Formula/lookup field for sales recency. |
 | `DIFF_DAYS` | Formula/lookup field for elapsed sales days. |
 | `CRITERIA` | Formula/lookup velocity category such as `FAST`, `MEDIUM`, `SLOW`, or `DEAD`. |
@@ -152,7 +158,10 @@ PRODUCT BRAND
 ```
 
 `Lot No.` is resolved to `Product Code`. Product name, unit, type, and brand
-are returned as lookup metadata when available.
+are returned as lookup metadata when available. Lot reconciliation and the
+office blank-Lot dropdown sum `Remaining` for repeated rows with the same
+`Product Code + Lot No.`; only Lots with positive summed `Remaining` are offered
+for assignment.
 
 ## Sheet: `MAIN : Log ข้อมูลตำแหน่ง`
 
@@ -250,16 +259,18 @@ Created automatically by the backend on first use, with the header on row 1.
 the status changes; status history is not kept. It is the source of truth for
 whether an ORD is still available for allocation:
 
-- `PENDING` or `COMPLETED`: hidden from the pending ORD list;
-- `CANCELED`, or no row: shown in the pending ORD list.
+- `PENDING`, `COMPLETED`, or `EXCEPTION`: hidden from the available allocation
+  list; `PENDING` and `EXCEPTION` appear in the waiting-status view;
+- `CANCELED`, or no row: shown in the available allocation list.
 
 Columns (approved 2026-11-26):
 
 ```text
 timestamp   submit time of the current submission; starts the four-hour hold
 ord_id      key; one row per ORD
-status      PENDING | COMPLETED | CANCELED
+status      PENDING | COMPLETED | CANCELED | EXCEPTION
 user        submitting user; replaced by the canceling user on CANCELED
+message     conflict detail for EXCEPTION; blank otherwise
 ```
 
 How each action changes the row:
@@ -270,6 +281,11 @@ How each action changes the row:
 | Cancel | unchanged | `CANCELED` | canceler |
 | Redo after cancel | set to now | `PENDING` | submitter |
 | Timed deduction | unchanged | `COMPLETED` | unchanged (submitter) |
+| Trigger conflict | unchanged | `EXCEPTION` | unchanged (submitter) |
+
+`EXCEPTION` is used when a selected location becomes inactive or its Lot
+conflicts with the pending Lot during the hold. It blocks deduction until an
+authorized user cancels and redoes the ORD.
 
 `timestamp` changes only on submit, so it always matches the `timestamp` of the
 allocation rows that belong to the current submission.
@@ -290,6 +306,7 @@ product_name
 location_id    LOCATION_ID; the only value used to deduct
 location       DISPLAY_LOC text for people
 amount         quantity to pick from this location
+lot_no         existing State Lot, or the Stock By Lot dropdown choice for a blank row
 ```
 
 Rows are written in one batch at submit and are never edited or deleted. Rows
@@ -313,8 +330,34 @@ location      <- DISPLAY_LOC
 available     <- QTY   (only ACTIVE/blank rows with QTY > 0)
 ```
 
-The location selector also shows `LOT_NO`, but Lot is not saved in the
-allocation sheet; `location_id` already identifies it.
+The location selector shows `LOT_NO`. Existing Lots are read-only. When the
+State row is blank, the admin must choose a positive-Remaining Lot from
+`DATA : Stock By Lot`; the selected `lot_no` is saved for four-hour finalization.
+
+## Sheet: `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ`
+
+Append-only reconciliation snapshots. The State sheet's `LOT_CHECK_STATUS`
+contains the latest current result for each matching ACTIVE row.
+
+```text
+PRODUCT_CODE
+LOT_NO
+STATE_ACTIVE_QTY
+STOCK_BY_LOT_REMAINING
+DIFFERENCE
+LOT_CHECK_STATUS
+CHECKED_AT
+```
+
+```text
+STATE_ACTIVE_QTY = sum QTY for ACTIVE/legacy-blank LOCATION_STATUS rows
+STOCK_BY_LOT_REMAINING = sum Remaining for matching Product Code + Lot No.
+DIFFERENCE = STATE_ACTIVE_QTY - STOCK_BY_LOT_REMAINING
+```
+
+`LOT_MATCHED` means difference 0; any nonzero difference is
+`LOT_MISMATCHED`; a missing Stock By Lot pair is `LOT_NOT_FOUND`. Blank State
+Lots use `LOT_UNASSIGNED` and do not create reconciliation log rows.
 
 ## Derived reconciliation
 
@@ -322,13 +365,15 @@ For a resolved SKU:
 
 ```text
 frontlineQty = sum(QTY for ACTIVE main-location rows of the SKU)
-cleanupQty   = sum(QTY for CLEANUP_REQUIRED rows of the SKU)
+cleanupQty   = sum(QTY for CLEANUP_REQUIRED rows of the SKU whose LOT_NO
+               exactly matches the scanned/manual Lot)
 erpQty       = sum(STOCK for matching Current Stock rows)
 difference   = frontlineQty - erpQty
 ```
 
-The UI displays `EQUAL`, `UNDER`, or `OVER` from the difference. Cleanup rows
-are shown separately and are not silently included in frontline quantity.
+The UI displays `EQUAL`, `UNDER`, or `OVER` from the difference. Exact-Lot
+cleanup rows are shown separately and are not silently included in frontline
+quantity.
 
 ## Known data-model gaps
 

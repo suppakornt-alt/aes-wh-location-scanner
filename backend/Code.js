@@ -7,11 +7,13 @@ const CONFIG = {
   STOCK_HEADER_ROW: 6,
   SHEET_LOT: 'DATA : Stock By Lot',
   LOT_HEADER_ROW: 6,
+  // Append-only snapshots of ACTIVE State quantity versus Stock By Lot Remaining.
+  SHEET_LOT_RECONCILIATION: 'MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ',
   // Office warehouse ORD allocation (docs/OFFICE_WAREHOUSE.md).
   // DATA : Current ORD is read-only input; its header is on physical row 6.
   SHEET_ORD: 'DATA : Current ORD',
   ORD_HEADER_ROW: 6,
-  // One row per ord_id with its status (PENDING / COMPLETED / CANCELED).
+  // One row per ord_id with its current allocation status.
   SHEET_ORD_STATUS: 'MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว',
   // One row per location chosen for a submitted ORD.
   SHEET_ORD_ALLOCATION: 'MAIN : Log พิกัดจาก ORD',

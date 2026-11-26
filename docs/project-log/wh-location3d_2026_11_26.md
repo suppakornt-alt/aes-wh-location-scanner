@@ -23,7 +23,8 @@ cancellation hold.
 
 Recorded as DEC-016 to DEC-019 in `docs/DECISIONS.md`.
 
-- Admin chooses **locations** (`LOCATION_ID`), not Lots.
+- The original version let the admin choose **locations** (`LOCATION_ID`); the
+  follow-up below adds a controlled Lot choice only for blank State rows.
 - Duplicate product lines in one ORD (paid + free) are **merged** into one SKU
   requirement by summing `quantity`. No free-goods label.
 - The **whole ORD** is submitted at once; every SKU must be allocated exactly.
@@ -43,9 +44,9 @@ Recorded as DEC-016 to DEC-019 in `docs/DECISIONS.md`.
 New sheets (header on row 1):
 
 ```text
-MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว   timestamp | ord_id | status | user
+MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว   timestamp | ord_id | status | user | message
     one row per ord_id, overwritten on status change (no history)
-MAIN : Log พิกัดจาก ORD            timestamp | ord_id | product_code | product_name | location_id | location | amount
+MAIN : Log พิกัดจาก ORD            timestamp | ord_id | product_code | product_name | location_id | location | amount | lot_no
     one row per chosen location, append only
 ```
 
@@ -108,3 +109,52 @@ None.
    `ORD_PICK` rows in `MAIN : Log ข้อมูลตำแหน่ง`, status `COMPLETED`.
 3. Confirm the COMPLETED-before-cut order of the trigger.
 4. Later: move `pick` and `relocate` to header-name column access.
+
+## Follow-up: controlled Lot assignment and reconciliation
+
+### Status
+
+Implemented locally on 2026-11-26. Not committed, pushed, synchronized with
+clasp, deployed, initialized against the live workbook, or release-tested yet.
+
+### Completed locally
+
+- Added the State `LOT_CHECK_STATUS` contract after `CLOSED_REASON` without
+  changing the owner-managed `STATUS` formula column.
+- Added `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ` with append-only
+  SKU/Lot reconciliation snapshots based on active State quantity versus
+  Stock By Lot `Remaining`.
+- Added a controlled office Lot dropdown for blank State rows. Existing Lots
+  are read-only; arbitrary Lot text is rejected.
+- Saved `lot_no` with each pending allocation. Finalization assigns that Lot to
+  the whole still-blank row, then deducts only the ORD amount.
+- Added `EXCEPTION` when a pending location is inactive or has a conflicting
+  Lot, preventing partial ORD deduction.
+- Kept office `เติม` immediate and independent from the four-hour hold.
+- Displayed exact-Lot `CLEANUP_REQUIRED` rows below active picker rows in red
+  and read-only.
+- Made empty-location close reason optional while retaining the required reason
+  for non-empty cleanup.
+- Added one-time bulk initializer `rebuildLotReconciliation` and updated active
+  project documents and release scenarios.
+
+### Files changed in the follow-up
+
+- Frontend: `pages/picker.html`, `js/app.js`, `js/office.js`, `css/style.css`.
+- Backend: `backend/Code.js`, `backend/office-allocation.js`,
+  `backend/warehouse-data.js`, `backend/warehouse-lookups.js`, and
+  `backend/warehouse-operations.js`.
+- Documentation: `README.md`, `AGENTS.md`, `docs/DATA_MODEL.md`,
+  `docs/BUSINESS_RULES.md`, `docs/OFFICE_WAREHOUSE.md`, `docs/UI_DESIGN.md`,
+  `docs/TEST_PLAN.md`, `docs/DECISIONS.md`, `docs/NEXT_MIGRATION.md`, and this
+  log.
+
+### Verification and next steps
+
+- Local JavaScript syntax and `git diff --check` must be rerun after the final
+  documentation pass.
+- The owner must review before any commit, push, clasp synchronization, or
+  deployment.
+- After backend deployment, run `rebuildLotReconciliation` once and verify the
+  live State/log outputs with approved test data.
+- Run the new `REC-*`, `LIFE-*`, and `OFF-*` cases recorded in the test plan.

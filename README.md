@@ -26,9 +26,19 @@ Current capabilities:
 - ERP reconciliation/audit view.
 - `ออฟฟิศโกดัง` ORD location allocation: administrators choose locations for
   every SKU of an ORD from `DATA : Current ORD`. After a four-hour cancellation
-  hold, a timed Apps Script trigger deducts the stock. See
-  `docs/OFFICE_WAREHOUSE.md`. Implemented and deployed; release test results
-  (`OFF-*` in the test plan) are still to be recorded.
+  hold, a timed Apps Script trigger deducts the stock. Blank-location Lots are
+  chosen from positive `Remaining` values in `DATA : Stock By Lot`, saved with
+  the pending allocation, and assigned only at final deduction. See
+  `docs/OFFICE_WAREHOUSE.md`.
+- Lot reconciliation by active `SKU_ID + LOT_NO`, with the latest result in
+  State and append-only snapshots in
+  `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ`.
+- Matching `CLEANUP_REQUIRED` rows appear below active scanner results in red,
+  without being counted as active stock.
+
+The original office workflow was deployed on 2026-11-26. The controlled Lot
+dropdown and Lot-reconciliation enhancement is implemented locally and still
+requires owner review, synchronization, deployment, and release testing.
 
 The planned third area is `ระบบฝากขาย`, a frontline consignment tire registry
 used before products are sent to a customer warehouse. Its authentication must
@@ -123,7 +133,13 @@ One-time setup for the office ORD workflow (after its first backend push):
 3. Deploy a new web-app version so the new API actions are live.
 
 The sheets `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` and `MAIN : Log พิกัดจาก ORD`
-are created automatically with their header row on first use.
+are created automatically with their header row on first use. Existing copies
+gain the new `message` and `lot_no` columns automatically. The reconciliation
+sheet `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ` is also created when needed.
+
+After deploying the Lot-reconciliation enhancement, run
+`rebuildLotReconciliation` once from the Apps Script editor. It initializes
+`LOT_CHECK_STATUS` for existing State rows and writes baseline snapshots.
 
 ## Known current limitations
 
@@ -132,6 +148,8 @@ are created automatically with their header row on first use.
   later.
 - The office ORD workflow has no undo after stock is deducted; staff restore
   stock with the normal add action.
+- An ORD becomes `EXCEPTION` without deduction when a selected location becomes
+  inactive or its Lot conflicts during the four-hour hold. Cancel and redo it.
 - `CLEANUP_REQUIRED` can later return to `ACTIVE`, but that recovery flow has
   not been defined or implemented yet.
 - Fine-grained supervisor permissions for cleanup actions have not yet been

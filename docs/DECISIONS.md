@@ -140,9 +140,11 @@ by a page rewrite.
 
 ## DEC-016 — Office allocation is location-based, full-ORD, with merged duplicates
 
-**Decision:** The admin chooses locations (`LOCATION_ID`), not Lots. One ORD
-is submitted as a whole. Rows with the same `ord_id + product_code` are merged
-into one requirement by summing `quantity`.
+**Decision:** The admin primarily chooses locations (`LOCATION_ID`). Existing
+location Lots are fixed; DEC-020 adds a controlled Lot choice only when the
+selected State row is blank. One ORD is submitted as a whole. Rows with the
+same `ord_id + product_code` are merged into one requirement by summing
+`quantity`.
 
 **Reason:** A location row already fixes SKU, Lot, and coordinate. Merging
 duplicate product lines (paid and free) keeps the screen simple and removes the
@@ -179,5 +181,51 @@ status change (no status history). Chosen locations are appended to
 in `MAIN : Log ข้อมูลตำแหน่ง`.
 
 **Reason:** `DATA : Current ORD` comes from an import range and is overwritten
-daily. A repeated submit for a `PENDING` or `COMPLETED` ORD is rejected, which
-gives retry safety without an extra ID.
+daily. A repeated submit for a `PENDING`, `COMPLETED`, or (after DEC-021)
+`EXCEPTION` ORD is rejected, which gives retry safety without an extra ID.
+
+## DEC-020 — Blank office Lots use a controlled Stock By Lot dropdown
+
+**Decision:** When an office allocation selects a State row with blank
+`LOT_NO`, require a dropdown choice from positive summed `Remaining` values for
+that SKU in `DATA : Stock By Lot`. Do not allow arbitrary Lot text. Existing
+State Lots remain read-only.
+
+**Reason:** This prevents typing mistakes while still letting the office fill
+missing location data from the ERP Lot source.
+
+## DEC-021 — Pending Lot assignment waits for ORD finalization
+
+**Decision:** Save the selected Lot on the allocation row, but do not change
+State during the four-hour hold. On finalization, if the row is still blank,
+apply the chosen Lot to the entire row (Option A), then deduct only the ORD
+amount. Canceling changes neither Lot nor quantity. If the row is inactive or
+now has a different Lot, set the whole ORD to `EXCEPTION` and deduct nothing.
+
+**Reason:** Lot assignment belongs to the confirmed ORD outcome, while a
+conflict must never be overwritten silently. The owner accepts Option A even
+when one physical row might contain mixed Lots because reconciliation will flag
+the discrepancy for workers.
+
+## DEC-022 — Lot reconciliation is active-only and uses Remaining
+
+**Decision:** Reconcile each active `SKU_ID + LOT_NO` State quantity against
+the summed `Remaining` for `Product Code + Lot No.` in `DATA : Stock By Lot`.
+Write the latest result to State `LOT_CHECK_STATUS` and append each check to
+`MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ`. Keep the existing `STATUS`
+formula column untouched.
+
+**Reason:** State needs a visible latest flag, while the separate append-only
+sheet preserves comparison history. Cleanup and inactive quantities are not
+confirmed active stock.
+
+## DEC-023 — Cleanup visibility and close reasons are intentionally different
+
+**Decision:** Show only cleanup rows whose Lot exactly matches the scanner or
+manual Lot, below active rows in red and read-only. A reason remains required
+for marking non-empty stock `CLEANUP_REQUIRED`; closing an already empty
+location may leave `CLOSED_REASON` blank.
+
+**Reason:** Workers need to see the relevant unclear physical quantity without
+mixing it into active stock. Empty closure does not need the same explanation
+as preserving questionable nonzero stock.

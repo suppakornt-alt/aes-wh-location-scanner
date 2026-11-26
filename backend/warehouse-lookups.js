@@ -63,6 +63,8 @@ function apiLookupByLot(targetInput) {
   let type = 'ยางนอก';
   let brand = '-';
   let productResolved = false;
+  let resolvedLotNo = '';
+  let resolvedFromLotSheet = false;
   
   // Phase 1: Search Lot Sheet to translate Lot -> Product Code
   if (lotSheet && searchKey) {
@@ -74,7 +76,9 @@ function apiLookupByLot(targetInput) {
       // Match either Lot Number or direct Product Code
       if (rowLot === searchKey || rowCode === searchKey) {
         productResolved = true;
+        resolvedFromLotSheet = true;
         resolvedProductCode = rowCode;
+        if (rowLot === searchKey) resolvedLotNo = rowLot;
         resolvedProductName = String(lotData[i][1] || '').trim();
         unit = String(lotData[i][2] || 'ชิ้น').trim();
         type = String(lotData[i][11] || 'ยางนอก').trim(); // Col L: Type
@@ -90,6 +94,7 @@ function apiLookupByLot(targetInput) {
   }
   
   const locations = [];
+  const cleanupLocations = [];
   let frontlineQty = 0;
   let cleanupQty = 0;
   let erpQty = 0;
@@ -103,19 +108,39 @@ function apiLookupByLot(targetInput) {
       const rowLot = String(stateData[i][3] || '').trim();  // Col D: LOT_NO
       const rowName = String(stateData[i][2] || '').trim(); // Col C: Name
 
-      // Match condition: SKU matches the Product Code OR Row's Lot matches searchKey
+      // Active locations remain SKU-wide. Cleanup rows are returned separately
+      // only when their Lot exactly matches the scanned/manual Lot.
       const isMatch = (rowSku !== '' && rowSku === resolvedProductCode) || 
                       (searchKey !== '' && rowLot === searchKey);
 
       if (isMatch) {
         productResolved = true;
+        if (rowLot && rowLot === searchKey) {
+          resolvedLotNo = rowLot;
+          // A State-only Lot must still resolve to its SKU so it can appear as
+          // LOT_NOT_FOUND and show matching cleanup rows for investigation.
+          if (!resolvedFromLotSheet && rowSku) resolvedProductCode = rowSku;
+        }
         if (!resolvedProductName && rowName) {
           resolvedProductName = rowName;
         }
 
         const rowQty = Number(stateData[i][6]) || 0;
         const rowStatus = getLocationStatus(stateData[i], stateColumns);
-        if (rowStatus === LOCATION_STATUS.CLEANUP_REQUIRED) cleanupQty += rowQty;
+        if (rowStatus === LOCATION_STATUS.CLEANUP_REQUIRED) {
+          if (resolvedLotNo && rowSku === resolvedProductCode && rowLot === resolvedLotNo) {
+            cleanupQty += rowQty;
+            cleanupLocations.push({
+              locId: String(getColumnValue(stateData[i], stateColumns, 'LOCATION_ID', '')),
+              lotNo: rowLot,
+              code: String(getColumnValue(stateData[i], stateColumns, 'DISPLAY_LOC', '-')),
+              qty: rowQty,
+              unit: unit,
+              cleanupReason: String(getColumnValue(stateData[i], stateColumns, 'CLOSED_REASON', '') || '')
+            });
+          }
+          continue;
+        }
         if (rowStatus !== LOCATION_STATUS.ACTIVE) continue;
 
         frontlineQty += rowQty;
@@ -131,7 +156,8 @@ function apiLookupByLot(targetInput) {
           rowStart: Number(stateData[i][11]) || 0,
           rowEnd: Number(stateData[i][12]) || 0,
           minLvl: Number(stateData[i][13]) || 1,
-          maxLvl: Number(stateData[i][14]) || 1
+          maxLvl: Number(stateData[i][14]) || 1,
+          lotCheckStatus: String(getColumnValue(stateData[i], stateColumns, 'LOT_CHECK_STATUS', '') || '')
         });
       }
     }
@@ -152,6 +178,11 @@ function apiLookupByLot(targetInput) {
   }
 
   const difference = frontlineQty - erpQty;
+  // The Lot result is calculated live for the scanned Lot; persistent State
+  // values are refreshed by mutations and the one-time rebuild utility.
+  const lotReconciliation = resolvedLotNo && resolvedProductCode
+    ? getLotReconciliationSnapshot(ss, resolvedProductCode, resolvedLotNo)
+    : null;
   
   return {
     success: true,
@@ -163,6 +194,8 @@ function apiLookupByLot(targetInput) {
       brand: brand,
       unit: unit,
       locations: locations,
+      cleanupLocations: cleanupLocations,
+      lotReconciliation: lotReconciliation,
       reconciliation: {
         frontlineQty: frontlineQty,
         erpQty: erpQty,
@@ -181,31 +214,45 @@ function updateLocationLot(locId, newLot) {
   }
 
   const userEmail = getCurrentUserEmail();
-  const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
-  const sheet = ss.getSheetByName(CONFIG.SHEET_STATE);
-  if (!sheet) return { success: false, message: 'ไม่พบชีตพิกัด' };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.openByUrl(CONFIG.SS_URL);
+    const sheet = ss.getSheetByName(CONFIG.SHEET_STATE);
+    if (!sheet) return { success: false, message: 'ไม่พบชีตพิกัด' };
 
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === String(locId).trim()) {
-      const oldLot = String(data[i][3] || '');
-      const sku = String(data[i][1]);
-      const displayLoc = String(data[i][15]);
+    const data = sheet.getDataRange().getValues();
+    const columns = getColumnIndexMap(data[0] || []);
+    for (let i = 1; i < data.length; i++) {
+      if (String(getColumnValue(data[i], columns, 'LOCATION_ID', '')).trim() === String(locId).trim()) {
+        const oldLot = String(getColumnValue(data[i], columns, 'LOT_NO', '')).trim();
+        const sku = String(getColumnValue(data[i], columns, 'SKU_ID', '')).trim();
+        const displayLoc = String(getColumnValue(data[i], columns, 'DISPLAY_LOC', '')).trim();
+        const lotColumn = columns.LOT_NO;
+        if (lotColumn === undefined) return { success: false, message: 'ชีตพิกัดไม่มีคอลัมน์ LOT_NO' };
 
-      sheet.getRange(i + 1, 4).setValue(cleanLot); // Col D (4)
+        sheet.getRange(i + 1, lotColumn + 1).setValue(cleanLot);
+        if (!cleanLot) setValueByHeader(sheet, i + 1, columns, 'LOT_CHECK_STATUS', LOT_CHECK_STATUS.UNASSIGNED);
+        SpreadsheetApp.flush();
 
-      logTransaction(
-        userEmail,
-        'แก้ไข LOT',
-        sku,
-        0,
-        displayLoc,
-        displayLoc,
-        `เปลี่ยน Lot จาก [${oldLot}] เป็น [${cleanLot}]`
-      );
+        logTransaction(
+          userEmail,
+          'แก้ไข LOT',
+          sku,
+          0,
+          displayLoc,
+          displayLoc,
+          `เปลี่ยน Lot จาก [${oldLot}] เป็น [${cleanLot}]`
+        );
 
-      return { success: true, newLot: cleanLot };
+        // Both pairs may have changed totals when a Lot is replaced.
+        if (oldLot && oldLot !== cleanLot) reconcileLotPair(ss, sku, oldLot);
+        if (cleanLot) reconcileLotPair(ss, sku, cleanLot);
+        return { success: true, newLot: cleanLot };
+      }
     }
+    return { success: false, message: 'ไม่พบ ID พิกัดที่ต้องการแก้ไข' };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: false, message: 'ไม่พบ ID พิกัดที่ต้องการแก้ไข' };
 }

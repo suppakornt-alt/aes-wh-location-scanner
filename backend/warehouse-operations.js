@@ -82,6 +82,11 @@ function addNewLocation(payload) {
 
   const locSummary = `${colStartStr}${rowMin}:${colEndStr}${rowMax}`;
   logTransaction(userEmail, 'รับเข้า (RECEIVE)', sku, qty, '-', locSummary, `เพิ่มพิกัดใหม่ (Lot: ${lotNo || '-'})`);
+  // A newly received Lot changes the ACTIVE State total immediately.
+  if (String(lotNo || '').trim()) {
+    SpreadsheetApp.flush();
+    reconcileLotPair(ss, sku, String(lotNo).trim());
+  }
   return { success: true };
   } finally {
     lock.releaseLock();
@@ -113,6 +118,12 @@ function pickStock(locId, qtyToPick) {
         }
 
         logTransaction(userEmail, 'เบิกออก (PICK)', data[i][1], -pickQty, data[i][15], '-', 'เบิกด่วน');
+        // Quantity changes must refresh the SKU/Lot comparison immediately.
+        const lotNo = String(getColumnValue(data[i], columns, 'LOT_NO', '')).trim();
+        if (lotNo) {
+          SpreadsheetApp.flush();
+          reconcileLotPair(ss, getColumnValue(data[i], columns, 'SKU_ID', ''), lotNo);
+        }
         return { success: true, remaining: newQty };
       }
     }
@@ -155,6 +166,13 @@ function addStockIn(locId, qtyToAdd) {
           getColumnValue(data[i], columns, 'DISPLAY_LOC', ''),
           'เติมสต็อกเดิม'
         );
+        // Office/picker เติม is immediate and therefore updates Lot status now,
+        // independent of the four-hour ORD workflow.
+        const lotNo = String(getColumnValue(data[i], columns, 'LOT_NO', '')).trim();
+        if (lotNo) {
+          SpreadsheetApp.flush();
+          reconcileLotPair(ss, getColumnValue(data[i], columns, 'SKU_ID', ''), lotNo);
+        }
         return { success: true, remaining: newQty };
       }
     }
@@ -378,6 +396,13 @@ function relocateStock(payload) {
         `${isFullMove ? 'ย้ายทั้งหมด' : 'ย้ายบางส่วน'} ${moveQty} หน่วย จาก locId ${locId}`
       );
 
+      // Relocation preserves total SKU/Lot quantity, but reconciliation also
+      // initializes the derived status on any newly created destination rows.
+      if (String(lotNo || '').trim()) {
+        SpreadsheetApp.flush();
+        reconcileLotPair(ss, sku, lotNo);
+      }
+
       return {
         success: true,
         originalLocId: String(locId),
@@ -427,8 +452,16 @@ function closeLocation(payload) {
       }
 
       const status = qty === 0 ? LOCATION_STATUS.INACTIVE_EMPTY : LOCATION_STATUS.CLEANUP_REQUIRED;
-      setLocationLifecycle(sheet, i + 1, status, userEmail, reason || 'ปิดพิกัดว่าง');
-      logTransaction(userEmail, 'ปิดพิกัด (CLOSE)', data[i][1], 0, data[i][15], '-', `${status}: ${reason || 'ปิดพิกัดว่าง'}`);
+      // Empty-location reasons are optional; cleanup keeps its existing
+      // required-reason rule until the frontline workflow is reviewed.
+      setLocationLifecycle(sheet, i + 1, status, userEmail, reason);
+      const reference = reason ? `${status}: ${reason}` : status;
+      logTransaction(userEmail, 'ปิดพิกัด (CLOSE)', data[i][1], 0, data[i][15], '-', reference);
+      const lotNo = String(getColumnValue(data[i], columns, 'LOT_NO', '')).trim();
+      if (lotNo) {
+        SpreadsheetApp.flush();
+        reconcileLotPair(ss, getColumnValue(data[i], columns, 'SKU_ID', ''), lotNo);
+      }
       return { success: true, status: status, preservedQty: qty };
     }
     return { success: false, message: 'ไม่พบ ID พิกัดนี้' };

@@ -76,8 +76,14 @@ After a product is resolved, show:
 - Difference
 - `EQUAL`, `UNDER`, or `OVER` status
 - Cleanup quantity separately when present
+- Lot-level `LOT_MATCHED`, `LOT_MISMATCHED`, `LOT_NOT_FOUND`, or
+  `LOT_UNASSIGNED` status against Stock By Lot `Remaining`
 
 This comparison is SKU-wide, not limited to one physical location.
+
+For the exact scanned/manual Lot, matching `CLEANUP_REQUIRED` rows appear below
+normal active rows in a red, read-only section. They show unclear remaining
+quantity for investigation and do not become selectable active stock.
 
 ### Relocation modal
 
@@ -127,7 +133,7 @@ badge for `PENDING` ORDs).
 Pending ORD list
     -> เบิกรายการ (open one full ORD)
     -> one card per SKU (duplicate product lines merged)
-    -> choose location(s) + quantity per SKU, + for another location
+    -> choose location(s) + Lot when blank + quantity per SKU
     -> fix location data if needed: add new location / add quantity
     -> ยืนยันการเบิก (whole ORD)
     -> ORD moves to the PENDING list for 4 hours, then stock is deducted
@@ -139,7 +145,9 @@ by ORD, customer, or product code.
 
 **Allocation screen:** each SKU card shows code, name, unit, required,
 allocated, and remaining quantity. Each location row has a selector showing
-`DISPLAY_LOC`, Lot, and current quantity, plus a quantity input. The same
+`DISPLAY_LOC`, Lot, and current quantity, plus a quantity input. An existing
+Lot is read-only. A blank-Lot row shows a required dropdown containing only
+positive-`Remaining` Lots for that SKU; it does not allow arbitrary typing. The same
 location cannot be chosen twice for one SKU. Free lines are not labelled. A SKU
 with exactly one location has it pre-selected; the admin still enters the
 amount. The card turns green when the SKU is exactly allocated.
@@ -148,14 +156,17 @@ amount. The card turns green when the SKU is exactly allocated.
 same coordinate, level, Lot, and quantity fields as the picker page (the
 product is already known, so no Lot scan is needed). Each location row has
 `เติม` to add quantity to that location. The ORD in progress stays on screen
-and the choices reload.
+and the choices reload. `เติม` updates quantity immediately; it does not wait
+for the ORD's four-hour hold.
 
 **Submit:** `ยืนยันการเบิก` is enabled only when every SKU is exactly allocated.
 A confirmation pop-up summarizes the ORD. If the backend reports that the ORD
 changed, show `ORD นี้มีการเปลี่ยนแปลง กรุณาโหลดใหม่`.
 
 **PENDING list:** shows submitted ORDs with submit time and when stock will be
-deducted, with a cancel action for each. There is no edit; cancel and redo.
+deducted, with a cancel action for each. `EXCEPTION` entries appear in red with
+their location/Lot conflict reason and can also be canceled and redone. There
+is no edit.
 
 The existing one-time authentication session, Thai-first language, light-first
 theme, Kanit font, sidebar, SweetAlert pop-ups, and responsive mobile behavior

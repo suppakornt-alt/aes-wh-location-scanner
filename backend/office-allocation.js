@@ -18,14 +18,15 @@
 const ORD_STATUS = Object.freeze({
   PENDING: 'PENDING',
   COMPLETED: 'COMPLETED',
-  CANCELED: 'CANCELED'
+  CANCELED: 'CANCELED',
+  EXCEPTION: 'EXCEPTION'
 });
 
 // Header rows of the two sheets this module owns. Columns are always resolved
 // by these names, so the owner may reorder columns without breaking the code.
-const ORD_STATUS_HEADERS = ['timestamp', 'ord_id', 'status', 'user'];
+const ORD_STATUS_HEADERS = ['timestamp', 'ord_id', 'status', 'user', 'message'];
 const ORD_ALLOCATION_HEADERS = [
-  'timestamp', 'ord_id', 'product_code', 'product_name', 'location_id', 'location', 'amount'
+  'timestamp', 'ord_id', 'product_code', 'product_name', 'location_id', 'location', 'amount', 'lot_no'
 ];
 
 // ------------------------------------------------------------
@@ -87,6 +88,17 @@ function getOrCreateOwnedSheet(ss, sheetName, headers) {
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return sheet;
+  }
+
+  // These backend-owned sheets may predate new fields such as lot_no/message.
+  // Append missing headers without moving or rewriting existing audit data.
+  const width = Math.max(sheet.getLastColumn(), 1);
+  const existing = sheet.getRange(1, 1, 1, width).getValues()[0];
+  const columns = getColumnIndexMap(existing);
+  const missing = headers.filter(header => columns[header.toUpperCase()] === undefined);
+  if (missing.length) {
+    sheet.getRange(1, width + 1, 1, missing.length).setValues([missing]);
   }
   return sheet;
 }
@@ -194,7 +206,8 @@ function readOrderStatusMap(statusSheet) {
       sheetRow: i + 1,
       timestamp: getColumnValue(row, columns, 'TIMESTAMP', ''),
       status: String(getColumnValue(row, columns, 'STATUS', '')).trim().toUpperCase(),
-      user: String(getColumnValue(row, columns, 'USER', '')).trim()
+      user: String(getColumnValue(row, columns, 'USER', '')).trim(),
+      message: String(getColumnValue(row, columns, 'MESSAGE', '')).trim()
     });
   }
   return { statusMap: statusMap, columns: columns, width: (values[0] || []).length };
@@ -202,7 +215,9 @@ function readOrderStatusMap(statusSheet) {
 
 function isOrderLocked(statusEntry) {
   return Boolean(statusEntry) &&
-    (statusEntry.status === ORD_STATUS.PENDING || statusEntry.status === ORD_STATUS.COMPLETED);
+    (statusEntry.status === ORD_STATUS.PENDING ||
+      statusEntry.status === ORD_STATUS.COMPLETED ||
+      statusEntry.status === ORD_STATUS.EXCEPTION);
 }
 
 function getHoldMilliseconds() {
@@ -229,7 +244,7 @@ function getOfficeOrders() {
 
   const pending = [];
   statusMap.forEach((entry, ordId) => {
-    if (entry.status !== ORD_STATUS.PENDING) return;
+    if (entry.status !== ORD_STATUS.PENDING && entry.status !== ORD_STATUS.EXCEPTION) return;
     const submittedAt = entry.timestamp instanceof Date ? entry.timestamp : new Date(entry.timestamp);
     const dueAt = new Date(submittedAt.getTime() + getHoldMilliseconds());
     const order = orders.get(ordId);
@@ -237,9 +252,11 @@ function getOfficeOrders() {
       ordId: ordId,
       customer: order ? order.customer : '',
       user: entry.user,
+      status: entry.status,
+      message: entry.message,
       submittedAt: formatThaiDateTime(submittedAt, timeZone),
-      dueAt: formatThaiDateTime(dueAt, timeZone),
-      dueTime: dueAt.getTime()
+      dueAt: entry.status === ORD_STATUS.PENDING ? formatThaiDateTime(dueAt, timeZone) : '',
+      dueTime: entry.status === ORD_STATUS.PENDING ? dueAt.getTime() : Number.MAX_SAFE_INTEGER
     });
   });
   pending.sort((a, b) => a.dueTime - b.dueTime);
@@ -273,8 +290,8 @@ function readStockMeta(ss, productCodes) {
   return meta;
 }
 
-// Returns, per requested SKU, the ACTIVE locations with QTY > 0. LOCATION_ID is
-// the value the page submits; DISPLAY_LOC and LOT_NO are display-only.
+// Returns ACTIVE location choices plus valid positive-Remaining Lots per SKU.
+// Existing location Lots stay read-only; blank locations use the Lot dropdown.
 function getOrderLocationChoices(payload) {
   const requested = Array.isArray(payload.productCodes) ? payload.productCodes : [];
   const productCodes = new Set(requested.map(code => String(code || '').trim()).filter(Boolean));
@@ -309,7 +326,14 @@ function getOrderLocationChoices(payload) {
     choices[code].sort((a, b) => a.location.localeCompare(b.location));
   });
 
-  return { success: true, data: { choices: choices, meta: readStockMeta(ss, productCodes) } };
+  return {
+    success: true,
+    data: {
+      choices: choices,
+      lots: getPositiveLotChoicesByProduct(ss, productCodes),
+      meta: readStockMeta(ss, productCodes)
+    }
+  };
 }
 
 // ------------------------------------------------------------
@@ -328,8 +352,12 @@ function validateAllocationPayloadShape(ordId, lines, allocations) {
   for (const item of allocations) {
     const locationId = String(item.locationId || '').trim();
     const amount = Number(item.amount);
+    const lotNo = String(item.lotNo || '').trim();
     if (!String(item.productCode || '').trim() || !locationId) return 'ข้อมูลพิกัดไม่ครบ';
     if (!Number.isFinite(amount) || amount <= 0) return 'จำนวนที่เบิกต้องมากกว่า 0';
+    // The browser submits existing and selected Lots as text so leading zeroes
+    // survive; the live State/Stock By Lot checks below remain authoritative.
+    if (lotNo && !/^\d{1,20}$/.test(lotNo)) return 'Lot Number ต้องเป็นตัวเลขไม่เกิน 20 หลัก';
     // One location belongs to one SKU, so a location may appear only once.
     if (seenLocations.has(locationId)) return 'เลือกพิกัดซ้ำในใบเบิกเดียวกัน';
     seenLocations.add(locationId);
@@ -393,6 +421,9 @@ function submitOrderAllocation(payload) {
     const stateSheet = ss.getSheetByName(CONFIG.SHEET_STATE);
     if (!stateSheet) return { success: false, message: 'ไม่พบชีตตำแหน่งสินค้า' };
     const state = readStateRowsById(stateSheet);
+    // Blank State rows may receive only Lots currently listed with positive
+    // Remaining for their SKU; the dropdown is convenience, this is security.
+    const validLotsByProduct = getPositiveLotChoicesByProduct(ss, new Set(order.lines.keys()));
 
     // Each chosen location must exist, be ACTIVE, belong to the SKU, and hold
     // at least the chosen amount right now.
@@ -422,13 +453,29 @@ function submitOrderAllocation(payload) {
         };
       }
 
+      const currentLot = String(getColumnValue(found.row, state.columns, 'LOT_NO', '')).trim();
+      const submittedLot = String(item.lotNo || '').trim();
+      let effectiveLot = currentLot;
+      if (currentLot) {
+        if (submittedLot && submittedLot !== currentLot) {
+          return { success: false, message: `Lot ของพิกัด ${location} เปลี่ยนแล้ว กรุณาโหลดพิกัดใหม่` };
+        }
+      } else {
+        const validLots = validLotsByProduct[productCode] || [];
+        if (!submittedLot || !validLots.some(option => option.lotNo === submittedLot)) {
+          return { success: false, message: `กรุณาเลือก Lot ที่มียอดคงเหลือสำหรับ ${productCode}` };
+        }
+        effectiveLot = submittedLot;
+      }
+
       allocatedBySku.set(productCode, (allocatedBySku.get(productCode) || 0) + amount);
       allocationRecords.push({
         product_code: productCode,
         product_name: line.productName,
         location_id: locationId,
         location: location,
-        amount: amount
+        amount: amount,
+        lot_no: effectiveLot
       });
     }
 
@@ -465,7 +512,8 @@ function submitOrderAllocation(payload) {
       timestamp: timestamp,
       ord_id: ordId,
       status: ORD_STATUS.PENDING,
-      user: userEmail
+      user: userEmail,
+      message: ''
     });
     const targetRow = existingStatus ? existingStatus.sheetRow : statusSheet.getLastRow() + 1;
     statusSheet.getRange(targetRow, 1, 1, statusInfo.width).setValues([statusRow]);
@@ -500,12 +548,13 @@ function cancelOrderAllocation(payload) {
     const statusSheet = getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_STATUS, ORD_STATUS_HEADERS);
     const { statusMap, columns } = readOrderStatusMap(statusSheet);
     const entry = statusMap.get(ordId);
-    if (!entry || entry.status !== ORD_STATUS.PENDING) {
-      return { success: false, message: `${ordId} ไม่ได้อยู่ในสถานะรอตัดสต็อก จึงยกเลิกไม่ได้` };
+    if (!entry || (entry.status !== ORD_STATUS.PENDING && entry.status !== ORD_STATUS.EXCEPTION)) {
+      return { success: false, message: `${ordId} ไม่ได้อยู่ในสถานะรอตัดสต็อก/ตรวจสอบ จึงยกเลิกไม่ได้` };
     }
 
     statusSheet.getRange(entry.sheetRow, columns.STATUS + 1).setValue(ORD_STATUS.CANCELED);
     statusSheet.getRange(entry.sheetRow, columns.USER + 1).setValue(userEmail);
+    if (columns.MESSAGE !== undefined) statusSheet.getRange(entry.sheetRow, columns.MESSAGE + 1).setValue('');
     return { success: true, ordId: ordId };
   } finally {
     lock.releaseLock();
@@ -543,7 +592,8 @@ function readAllocationGroups(allocationSheet) {
       productCode: String(getColumnValue(row, columns, 'PRODUCT_CODE', '')).trim(),
       locationId: String(getColumnValue(row, columns, 'LOCATION_ID', '')).trim(),
       location: String(getColumnValue(row, columns, 'LOCATION', '')).trim(),
-      amount: Number(getColumnValue(row, columns, 'AMOUNT', 0)) || 0
+      amount: Number(getColumnValue(row, columns, 'AMOUNT', 0)) || 0,
+      lotNo: String(getColumnValue(row, columns, 'LOT_NO', '')).trim()
     });
   }
   return groups;
@@ -566,10 +616,12 @@ function processDueOrderAllocations() {
 
   try {
     const ss = openWarehouseSpreadsheet();
-    const statusSheet = ss.getSheetByName(CONFIG.SHEET_ORD_STATUS);
-    const allocationSheet = ss.getSheetByName(CONFIG.SHEET_ORD_ALLOCATION);
+    // Ensure newly introduced message/lot_no columns exist before the trigger
+    // reads older backend-owned sheets.
+    const statusSheet = getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_STATUS, ORD_STATUS_HEADERS);
+    const allocationSheet = getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_ALLOCATION, ORD_ALLOCATION_HEADERS);
     const stateSheet = ss.getSheetByName(CONFIG.SHEET_STATE);
-    if (!statusSheet || !allocationSheet || !stateSheet) return;
+    if (!stateSheet) return;
 
     const { statusMap, columns: statusColumns } = readOrderStatusMap(statusSheet);
     const cutoff = Date.now() - getHoldMilliseconds();
@@ -586,7 +638,11 @@ function processDueOrderAllocations() {
     const groups = readAllocationGroups(allocationSheet);
     const state = readStateRowsById(stateSheet);
     const qtyColumn = state.columns.QTY;
+    const lotColumn = state.columns.LOT_NO;
     if (qtyColumn === undefined) throw new Error('ชีตตำแหน่งสินค้าไม่มีคอลัมน์ QTY');
+    if (lotColumn === undefined) throw new Error('ชีตตำแหน่งสินค้าไม่มีคอลัมน์ LOT_NO');
+    // Validate reconciliation destinations before any ORD is marked complete.
+    getLotReconciliationLogSheet(ss);
 
     due.forEach(({ ordId, entry }) => {
       const items = groups.get(`${ordId}|${toSecondKey(entry.timestamp)}`) || [];
@@ -597,22 +653,59 @@ function processDueOrderAllocations() {
         return;
       }
 
-      // Plan every change in memory first.
+      // A Lot changed during the hold must never be overwritten. Treat the
+      // whole ORD as an exception so no subset is deducted silently.
+      let conflictMessage = '';
+      items.forEach(item => {
+        if (conflictMessage) return;
+        const found = state.rowsById.get(item.locationId);
+        if (!found || !isActiveLocationRow(found.row, state.columns)) {
+          conflictMessage = `${item.productCode} พิกัด ${item.location} ไม่อยู่ในสถานะใช้งาน`;
+          return;
+        }
+        const currentLot = String(found.row[lotColumn] || '').trim();
+        const pendingLot = String(item.lotNo || '').trim();
+        if (!pendingLot && !currentLot) {
+          conflictMessage = `${item.productCode} พิกัด ${item.location} ไม่มี Lot ที่ยืนยันไว้`;
+        } else if (currentLot && pendingLot && currentLot !== pendingLot) {
+          conflictMessage = `${item.productCode} พิกัด ${item.location} เปลี่ยนเป็น Lot ${currentLot} แล้ว`;
+        }
+      });
+      if (conflictMessage) {
+        statusSheet.getRange(entry.sheetRow, statusColumns.STATUS + 1).setValue(ORD_STATUS.EXCEPTION);
+        if (statusColumns.MESSAGE !== undefined) {
+          statusSheet.getRange(entry.sheetRow, statusColumns.MESSAGE + 1).setValue(conflictMessage);
+        }
+        console.warn(`processDueOrderAllocations: ${ordId} exception: ${conflictMessage}`);
+        return;
+      }
+
+      // Plan every quantity and Lot change in memory first.
       const changes = [];
       const logRows = [];
+      const affectedLotPairs = new Map();
       items.forEach(item => {
         const found = state.rowsById.get(item.locationId);
-        const active = Boolean(found) && isActiveLocationRow(found.row, state.columns);
-        const currentQty = active ? (Number(found.row[qtyColumn]) || 0) : 0;
+        const currentQty = Number(found.row[qtyColumn]) || 0;
+        const currentLot = String(found.row[lotColumn] || '').trim();
+        const effectiveLot = currentLot || String(item.lotNo || '').trim();
         const deducted = Math.min(item.amount, Math.max(currentQty, 0));
         const shortfall = item.amount - deducted;
         const newQty = roundQty(currentQty - deducted);
 
-        if (active) {
-          // Keep the in-memory row current in case two ORDs share a location.
-          found.row[qtyColumn] = newQty;
-          changes.push({ sheetRow: found.index + 1, newQty: newQty, becameEmpty: newQty === 0 });
-        }
+        // Keep the in-memory row current in case two due ORDs share a location.
+        found.row[qtyColumn] = newQty;
+        found.row[lotColumn] = effectiveLot;
+        changes.push({
+          sheetRow: found.index + 1,
+          newQty: newQty,
+          assignedLot: currentLot ? '' : effectiveLot,
+          becameEmpty: newQty === 0
+        });
+        affectedLotPairs.set(lotReconciliationKey(item.productCode, effectiveLot), {
+          productCode: item.productCode,
+          lotNo: effectiveLot
+        });
 
         const reference = `${ordId} AUTO` + (shortfall > 0 ? ` (ขาด ${shortfall} จากที่เลือก ${item.amount})` : '');
         logRows.push([
@@ -632,9 +725,15 @@ function processDueOrderAllocations() {
       // is under-deducted (visible in the log) instead of deducted twice by
       // the next trigger run.
       statusSheet.getRange(entry.sheetRow, statusColumns.STATUS + 1).setValue(ORD_STATUS.COMPLETED);
+      if (statusColumns.MESSAGE !== undefined) statusSheet.getRange(entry.sheetRow, statusColumns.MESSAGE + 1).setValue('');
       SpreadsheetApp.flush();
 
       changes.forEach(change => {
+        // Option A: a confirmed Lot applies to the entire previously blank row,
+        // while only the ORD allocation quantity is deducted.
+        if (change.assignedLot) {
+          stateSheet.getRange(change.sheetRow, lotColumn + 1).setValue(change.assignedLot);
+        }
         stateSheet.getRange(change.sheetRow, qtyColumn + 1).setValue(change.newQty);
         if (change.becameEmpty) {
           setLocationLifecycle(stateSheet, change.sheetRow, LOCATION_STATUS.INACTIVE_EMPTY, entry.user, `เบิกตาม ${ordId} จนหมดพิกัด`);
@@ -642,6 +741,7 @@ function processDueOrderAllocations() {
       });
       appendLocationLogRows(ss, logRows);
       SpreadsheetApp.flush();
+      affectedLotPairs.forEach(pair => reconcileLotPair(ss, pair.productCode, pair.lotNo));
     });
   } finally {
     lock.releaseLock();

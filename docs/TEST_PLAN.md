@@ -54,10 +54,15 @@ NOT_RUN | PASS | FAIL | BLOCKED
 | REC-002 | Frontline equals ERP | Status is `EQUAL` | NOT_RUN |
 | REC-003 | Frontline is below ERP | Status is `UNDER` | NOT_RUN |
 | REC-004 | Frontline is above ERP | Status is `OVER` | NOT_RUN |
-| REC-005 | SKU has cleanup quantity | Cleanup quantity is shown separately | NOT_RUN |
+| REC-005 | Scanned Lot has matching cleanup quantity | Exact-Lot cleanup quantity is shown separately | NOT_RUN |
 | REC-006 | Location is `INACTIVE_EMPTY` | It is excluded from normal scanner and 3D views | NOT_RUN |
 | REC-007 | Location is `CLEANUP_REQUIRED` | It is excluded from active total but preserved | NOT_RUN |
 | REC-008 | Multiple SKUs share a coordinate | Each product row remains visible separately | NOT_RUN |
+| REC-009 | Active State SKU/Lot equals summed Stock By Lot `Remaining` | State rows and UI show `LOT_MATCHED`; a reconciliation snapshot is appended | NOT_RUN |
+| REC-010 | Active State SKU/Lot differs from summed `Remaining` | `LOT_MISMATCHED` and the signed difference are shown | NOT_RUN |
+| REC-011 | Active State SKU/Lot has no Stock By Lot pair | `LOT_NOT_FOUND` is shown | NOT_RUN |
+| REC-012 | Active State row has a blank Lot | `LOT_UNASSIGNED`; no blank-Lot reconciliation log row is appended | NOT_RUN |
+| REC-013 | Scan a Lot that matches one cleanup row but not another | Only the exact-Lot cleanup row appears below active rows in red and read-only | NOT_RUN |
 
 ## Quantity actions
 
@@ -90,9 +95,10 @@ NOT_RUN | PASS | FAIL | BLOCKED
 | --- | --- | --- | --- |
 | LIFE-001 | Close an empty location | Row becomes `INACTIVE_EMPTY`; row is not deleted | NOT_RUN |
 | LIFE-002 | Flag a non-empty invalid location | Row becomes `CLEANUP_REQUIRED`; quantity is preserved | NOT_RUN |
-| LIFE-003 | Cleanup action requires a reason | Blank reason is rejected | NOT_RUN |
+| LIFE-003 | Flag non-empty stock for cleanup without a reason | Blank reason is rejected | NOT_RUN |
 | LIFE-004 | Cleanup row appears in reconciliation | Quantity is reported separately | NOT_RUN |
 | LIFE-005 | Attempt future cleanup recovery | Keep blocked until the recovery workflow is implemented | NOT_RUN |
+| LIFE-006 | Close an empty location without a reason | Close succeeds and `CLOSED_REASON` remains blank | NOT_RUN |
 
 ## 3D, office, and UI
 
@@ -117,9 +123,13 @@ deduction without waiting four hours, temporarily lower `ORD_HOLD_HOURS` in a
 test deployment only, or run `processDueOrderAllocations` manually from the
 editor after the hold has passed.
 
+Before REC-009 to REC-012, run `rebuildLotReconciliation` once after deploying
+the backend. Use approved test rows because it writes State statuses and
+baseline log snapshots.
+
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
-| OFF-001 | Load `DATA : Current ORD` (header row 6) | ORDs without a `PENDING`/`COMPLETED` entry are listed with date, ORD, customer, SKU count, and `เบิกรายการ` | NOT_RUN |
+| OFF-001 | Load `DATA : Current ORD` (header row 6) | ORDs without a `PENDING`/`COMPLETED`/`EXCEPTION` entry are listed with date, ORD, customer, SKU count, and `เบิกรายการ` | NOT_RUN |
 | OFF-002 | Open an ORD with the same product twice (e.g. 2 + 2) | One SKU card with required quantity 4 | NOT_RUN |
 | OFF-003 | Open a location selector | Only `ACTIVE` rows with `QTY > 0` for that SKU appear, showing location, Lot, and quantity | NOT_RUN |
 | OFF-004 | Split one SKU across two locations | Two rows are saved in `MAIN : Log พิกัดจาก ORD` | NOT_RUN |
@@ -139,6 +149,14 @@ editor after the hold has passed.
 | OFF-018 | `COMPLETED` ORD still present in `DATA : Current ORD` | ORD is not listed and cannot be submitted again | NOT_RUN |
 | OFF-019 | Trigger and a worker pick hit the same location together | Locking prevents lost updates; quantity never goes negative | NOT_RUN |
 | OFF-020 | Use the office workflow on Android Chrome and desktop | Cards, selectors, numeric inputs, pop-ups, and theme match the existing app | NOT_RUN |
+| OFF-021 | Select a location that already has a Lot | Existing Lot is read-only and is saved with the allocation | NOT_RUN |
+| OFF-022 | Select a blank-Lot location | Required dropdown shows only that SKU's Lots with positive summed `Remaining`; no free-text option exists | NOT_RUN |
+| OFF-023 | Cancel a pending blank-Lot allocation before four hours | Status becomes `CANCELED`; State `LOT_NO` and `QTY` remain unchanged | NOT_RUN |
+| OFF-024 | Trigger finalizes a blank-Lot location after four hours | Selected Lot is applied to the entire State row, only the ORD amount is deducted, audit and reconciliation rows are written | NOT_RUN |
+| OFF-025 | State row receives the same pending Lot during the hold | Trigger proceeds without overwriting or duplicating the Lot | NOT_RUN |
+| OFF-026 | State row receives a different Lot during the hold | Whole ORD becomes `EXCEPTION`; no selected location is deducted; reason appears in red | NOT_RUN |
+| OFF-027 | Selected location becomes inactive during the hold | Whole ORD becomes `EXCEPTION`; no allocation is deducted | NOT_RUN |
+| OFF-028 | Click `เติม` while allocating an ORD | State quantity increases immediately and is not delayed until ORD finalization | NOT_RUN |
 
 ## Release evidence
 

@@ -17,9 +17,10 @@ release tests.
 The owner pushed the follow-up controlled Lot dropdown and reconciliation work
 (DEC-020 to DEC-023); live deployment and release evidence remain unrecorded.
 The AES Team preparer selector and status-sheet rename (DEC-024/DEC-025) are
-implemented locally. Before the combined work is called complete: synchronize
-and deploy the current frontend/backend, run `rebuildLotReconciliation` once
-when still needed, then execute and record `REC-009` to `REC-013`,
+implemented and documented. Before the combined work is called complete:
+verify the synchronized frontend/backend in the live environment, run
+`rebuildLotReconciliation` once when still needed, then execute and record
+`REC-009` to `REC-013`,
 `LIFE-003`/`LIFE-006`, and `OFF-021` to `OFF-036`.
 
 Later improvements, not in the first version: draft saving, editing a

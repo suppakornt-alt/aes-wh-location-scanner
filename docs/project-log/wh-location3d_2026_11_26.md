@@ -177,3 +177,48 @@ Implemented locally after the owner pushed the preceding Lot work:
 
 This follow-up still requires local verification, owner review, Git/clasp
 synchronization, web-app deployment, and live release testing.
+
+## End-of-day closeout
+
+### Current progress
+
+The project now has the complete documented plan for the `ออฟฟิศโกดัง` page:
+
+1. ORD source data comes from `DATA : Current ORD` after the existing ERP and
+   cleaning-cycle process.
+2. Admins choose active locations and quantities for every SKU in the ORD.
+3. Blank State Lots are selected from positive `Remaining` Lots in
+   `DATA : Stock By Lot`; existing Lots remain read-only.
+4. Lot assignment waits until the four-hour ORD finalization, then applies to
+   the whole still-blank State row under Option A.
+5. Lot conflicts or inactive locations produce `EXCEPTION` with no deduction.
+6. `เติม` remains an immediate quantity increase.
+7. Exact-Lot cleanup rows appear below active picker results in red and remain
+   read-only.
+8. Active State Lots reconcile against Stock By Lot `Remaining`, with the
+   latest result in `LOT_CHECK_STATUS` and append-only history in
+   `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ`.
+9. The opened ORD requires one or more workers from every valid row in
+   `DATA : AES Team`; the status row stores canonical picker snapshots in
+   `pickers`.
+10. The canonical status sheet is
+    `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว`; the backend preserves the legacy
+    all-caps sheet by renaming it in place when necessary.
+
+### Handoff state
+
+- The owner has already pushed the preceding Lot/reconciliation work.
+- The worker-selector and status-sheet-name work is documented in the current
+  project state.
+- The working tree was clean at closeout.
+- JavaScript syntax checks and `git diff --check` passed during implementation.
+- Live workbook migration, Apps Script deployment verification, and release
+  scenarios remain unrecorded.
+- No further work is required today.
+
+### Next session start point
+
+Read `AGENTS.md`, then review `docs/OFFICE_WAREHOUSE.md`,
+`docs/DATA_MODEL.md`, `docs/DECISIONS.md`, and the `OFF-029` to `OFF-036`
+tests before changing code. Verify the live status-sheet rename and `pickers`
+column first, then run the approved release tests.

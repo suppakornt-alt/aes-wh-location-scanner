@@ -144,7 +144,12 @@ key rules are:
   requirement by summing `quantity`.
 - An ORD is hidden from the allocation list while it has a `PENDING`,
   `COMPLETED`, or `EXCEPTION` entry in
-  `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`. `CANCELED` returns it to the list.
+  `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว`. `CANCELED` returns it to the list.
+- At least one preparer is required. The selector includes every populated,
+  valid row in `DATA : AES Team`; it does not filter by `team` or `role`.
+- The frontend submits `actor_id` values only. The backend re-reads the team
+  sheet, rejects missing/unknown/duplicate IDs, and stores each picker as
+  `actor_id — full_name (nickname)` in the status row's `pickers` cell.
 - The admin chooses locations. Choices are `ACTIVE` rows with `QTY > 0` and a
   matching `SKU_ID`. One SKU may be split across locations; each location is
   one row in `MAIN : Log พิกัดจาก ORD`.

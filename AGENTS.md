@@ -75,16 +75,19 @@ Backend responsibilities are split as follows:
 The office ORD workflow has a separate timing rule:
 
 1. The admin selects active locations and quantities for the whole ORD.
-2. An existing State Lot is read-only. For a blank State Lot, the admin must
+2. The admin must select at least one preparer from every valid row in
+   `DATA : AES Team`. The browser submits `actor_id`; the backend validates it
+   against the live team sheet and stores canonical picker snapshots.
+3. An existing State Lot is read-only. For a blank State Lot, the admin must
    choose from positive summed `Remaining` Lots for that SKU in
    `DATA : Stock By Lot`; arbitrary Lot text is not accepted.
-3. Submit stores `lot_no` with the allocation but changes no State Lot or
+4. Submit stores `lot_no` with the allocation but changes no State Lot or
    quantity during the four-hour cancellation hold.
-4. At finalization, a still-blank State row receives the saved Lot for the
+5. At finalization, a still-blank State row receives the saved Lot for the
    entire row, then only the allocated ORD quantity is deducted.
-5. An inactive location or conflicting nonblank Lot changes the whole ORD to
+6. An inactive location or conflicting nonblank Lot changes the whole ORD to
    `EXCEPTION`; no allocation is deducted. Cancel and redo it.
-6. The office `เติม` action remains an immediate quantity increase and is not
+7. The office `เติม` action remains an immediate quantity increase and is not
    delayed by the ORD hold.
 
 ## Data model and invariants

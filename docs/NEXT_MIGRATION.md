@@ -14,12 +14,13 @@ Implemented and deployed on 2026-11-26 (DEC-016 to DEC-019), with the
 15-minute deduction trigger installed. Remaining: run and record the `OFF-*`
 release tests.
 
-The follow-up controlled Lot dropdown and reconciliation work (DEC-020 to
-DEC-023) is implemented locally but is not yet pushed or deployed. Before it is
-called complete: review the diff, synchronize frontend and backend, deploy a
-new web-app version, run `rebuildLotReconciliation` once, then execute and
-record `REC-009` to `REC-013`, `LIFE-003`/`LIFE-006`, and `OFF-021` to
-`OFF-028`.
+The owner pushed the follow-up controlled Lot dropdown and reconciliation work
+(DEC-020 to DEC-023); live deployment and release evidence remain unrecorded.
+The AES Team preparer selector and status-sheet rename (DEC-024/DEC-025) are
+implemented locally. Before the combined work is called complete: synchronize
+and deploy the current frontend/backend, run `rebuildLotReconciliation` once
+when still needed, then execute and record `REC-009` to `REC-013`,
+`LIFE-003`/`LIFE-006`, and `OFF-021` to `OFF-036`.
 
 Later improvements, not in the first version: draft saving, editing a
 `PENDING` ORD, undo after `COMPLETED`, free-goods labels, and stock reservation

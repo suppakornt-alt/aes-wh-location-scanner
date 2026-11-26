@@ -24,7 +24,7 @@ DATA : Current ORD
     cleaned ORD lines waiting for office allocation
     product_code -> SKU_ID
 
-MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว
+MAIN : Log ORD ที่ยืนยันพิกัดแล้ว
     one row per submitted ORD and its status
     (PENDING / COMPLETED / CANCELED / EXCEPTION)
 
@@ -250,9 +250,24 @@ ORD261002004  MI16P-0003    2         3,800.00
 ### Completion tracking
 
 `DATA : Current ORD` is overwritten daily, so no status is written to it. Which
-ORDs are done is decided only by `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`.
+ORDs are done is decided only by `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว`.
 
-## Sheet: `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว`
+## Sheet: `DATA : AES Team`
+
+Header row 1. Every populated valid row is available in the required office
+ORD preparer selector; there is currently no `team` or `role` filter.
+
+```text
+actor_id full_name nickname display_name team role email
+```
+
+`actor_id` is the submitted stable identity. The UI label is
+`full_name (nickname)`, falling back to `full_name` when nickname is blank.
+Blank trailing rows are ignored; a populated row without `actor_id` or
+`full_name`, or a duplicate `actor_id`, blocks loading so bad identities are
+not recorded.
+
+## Sheet: `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว`
 
 Created automatically by the backend on first use, with the header on row 1.
 **One row per ORD, keyed by `ord_id`.** The row is overwritten when
@@ -271,17 +286,23 @@ ord_id      key; one row per ORD
 status      PENDING | COMPLETED | CANCELED | EXCEPTION
 user        submitting user; replaced by the canceling user on CANCELED
 message     conflict detail for EXCEPTION; blank otherwise
+pickers     semicolon-separated actor_id — full_name (nickname) snapshots
 ```
+
+The backend safely renames the legacy
+`MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` tab when the new-cased name is absent. If
+two distinct tabs somehow exist, it stops instead of silently splitting ORD
+history.
 
 How each action changes the row:
 
-| Action | `timestamp` | `status` | `user` |
-| --- | --- | --- | --- |
-| First submit | set to now | `PENDING` | submitter |
-| Cancel | unchanged | `CANCELED` | canceler |
-| Redo after cancel | set to now | `PENDING` | submitter |
-| Timed deduction | unchanged | `COMPLETED` | unchanged (submitter) |
-| Trigger conflict | unchanged | `EXCEPTION` | unchanged (submitter) |
+| Action | `timestamp` | `status` | `user` | `pickers` |
+| --- | --- | --- | --- | --- |
+| First submit | set to now | `PENDING` | submitter | selected worker snapshots |
+| Cancel | unchanged | `CANCELED` | canceler | unchanged |
+| Redo after cancel | set to now | `PENDING` | submitter | replaced by new selection |
+| Timed deduction | unchanged | `COMPLETED` | unchanged (submitter) | unchanged |
+| Trigger conflict | unchanged | `EXCEPTION` | unchanged (submitter) | unchanged |
 
 `EXCEPTION` is used when a selected location becomes inactive or its Lot
 conflicts with the pending Lot during the hold. It blocks deduction until an

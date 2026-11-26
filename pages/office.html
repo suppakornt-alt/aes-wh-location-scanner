@@ -104,8 +104,20 @@
             </button>
 
             <div class="type-group-block of-ord-head">
-              <div class="of-ord-title" id="alloc-ord-id">-</div>
-              <div class="of-ord-meta" id="alloc-ord-meta">-</div>
+              <div class="of-ord-head-main">
+                <div class="of-ord-title" id="alloc-ord-id">-</div>
+                <div class="of-ord-meta" id="alloc-ord-meta">-</div>
+              </div>
+              <!-- Required multi-worker selector; options come from DATA : AES Team. -->
+              <div class="of-worker-picker">
+                <label class="of-worker-label">ผู้จัดสินค้า <span aria-hidden="true">*</span></label>
+                <details class="of-worker-dropdown" id="worker-picker-dropdown">
+                  <summary id="worker-picker-summary">เลือกผู้จัดสินค้า</summary>
+                  <div class="of-worker-options" id="worker-picker-options"></div>
+                </details>
+                <div class="of-worker-selected" id="worker-picker-selected"></div>
+                <div class="of-row-error" id="worker-picker-error">กรุณาเลือกผู้จัดสินค้าอย่างน้อย 1 คน</div>
+              </div>
             </div>
 
             <div id="alloc-skus" class="of-card-list"></div>

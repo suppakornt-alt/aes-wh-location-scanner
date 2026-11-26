@@ -19,6 +19,7 @@ let currentUserEmail = '';
 
 let orders = [];        // ORDs available for allocation (from getOfficeOrders)
 let pending = [];       // PENDING ORDs waiting for the timed deduction
+let workers = [];       // Every valid DATA : AES Team row, identified by actor_id
 let holdHours = 4;
 
 // The ORD being allocated: { ordId, orderDate, customer, skus: [...] }
@@ -98,6 +99,7 @@ async function loadOrders() {
   }
   orders = res.data.orders || [];
   pending = res.data.pending || [];
+  workers = res.data.workers || [];
   holdHours = res.data.holdHours || holdHours;
   renderOrderList();
   renderPendingList();
@@ -147,6 +149,7 @@ async function openOrder(ordId) {
     ordId: order.ordId,
     orderDate: order.orderDate,
     customer: order.customer,
+    pickerIds: [],
     skus: order.lines.map(line => ({ ...line, rows: [newRow()] }))
   };
   choices = {};
@@ -172,15 +175,42 @@ async function openOrder(ordId) {
   document.getElementById('alloc-panel').hidden = false;
   document.getElementById('alloc-ord-id').textContent = current.ordId;
   document.getElementById('alloc-ord-meta').textContent = `${current.orderDate || '-'} · ${current.customer || '-'}`;
+  renderWorkerPicker();
   renderAllocation();
   document.getElementById('view-orders').scrollTo({ top: 0 });
 }
 
 function closeOrder() {
   current = null;
+  document.getElementById('worker-picker-dropdown').open = false;
   document.getElementById('alloc-panel').hidden = true;
   document.getElementById('orders-panel').hidden = false;
   renderOrderList();
+}
+
+// Render a checkbox dropdown so one ORD can record every worker who prepared
+// it while submitting stable actor IDs rather than editable display names.
+function renderWorkerPicker() {
+  if (!current) return;
+  const selected = new Set(current.pickerIds);
+  const options = document.getElementById('worker-picker-options');
+  options.innerHTML = workers.length
+    ? workers.map(worker => `
+        <label class="of-worker-option">
+          <input type="checkbox" value="${esc(worker.actorId)}" ${selected.has(worker.actorId) ? 'checked' : ''}>
+          <span>${esc(worker.label)}</span>
+          <small>${esc(worker.actorId)}</small>
+        </label>`).join('')
+    : '<div class="of-worker-empty">ไม่พบรายชื่อใน DATA : AES Team</div>';
+
+  const selectedWorkers = workers.filter(worker => selected.has(worker.actorId));
+  document.getElementById('worker-picker-summary').textContent = selectedWorkers.length
+    ? `เลือกแล้ว ${selectedWorkers.length} คน`
+    : 'เลือกผู้จัดสินค้า';
+  document.getElementById('worker-picker-selected').innerHTML = selectedWorkers
+    .map(worker => `<span class="chip">${esc(worker.label)}</span>`)
+    .join('');
+  document.getElementById('worker-picker-error').hidden = selectedWorkers.length > 0;
 }
 
 // Loads (or reloads) the location choices for the given SKUs.
@@ -347,8 +377,11 @@ function refreshSkuStatus(sku) {
 function updateSubmitBar() {
   const done = current.skus.filter(skuIsComplete).length;
   const total = current.skus.length;
-  document.getElementById('alloc-summary').textContent = `ครบแล้ว ${done} / ${total} สินค้า`;
-  document.getElementById('btn-submit-alloc').disabled = submitting || done !== total;
+  const hasPickers = current.pickerIds.length > 0;
+  document.getElementById('alloc-summary').textContent = hasPickers
+    ? `ครบแล้ว ${done} / ${total} สินค้า · ผู้จัด ${current.pickerIds.length} คน`
+    : `ครบแล้ว ${done} / ${total} สินค้า · ยังไม่ได้เลือกผู้จัดสินค้า`;
+  document.getElementById('btn-submit-alloc').disabled = submitting || done !== total || !hasPickers;
 }
 
 // ------------------------------------------
@@ -523,7 +556,7 @@ function buildSubmitPayload() {
       });
     });
   });
-  return { ordId: current.ordId, lines, allocations };
+  return { ordId: current.ordId, lines, allocations, pickerIds: [...current.pickerIds] };
 }
 
 function confirmTableHTML() {
@@ -535,6 +568,7 @@ function confirmTableHTML() {
   return `
     <div class="of-swal-text">
       <div><strong>${esc(current.ordId)}</strong> · ${esc(current.customer || '-')}</div>
+      <div><strong>ผู้จัดสินค้า:</strong> ${esc(workers.filter(worker => current.pickerIds.includes(worker.actorId)).map(worker => worker.label).join(', '))}</div>
       <div class="of-swal-note">ระบบจะตัดสต็อกอัตโนมัติหลังยืนยัน ${esc(holdHours)} ชั่วโมง ระหว่างนี้ยกเลิกได้ที่เมนู "รอตัดสต็อก"</div>
       <table class="of-confirm-table">
         <thead><tr><th>รหัสสินค้า</th><th>พิกัด</th><th>Lot</th><th class="num">จำนวน</th></tr></thead>
@@ -545,7 +579,7 @@ function confirmTableHTML() {
 
 async function submitAllocation() {
   if (!current || submitting) return;
-  if (!current.skus.every(skuIsComplete)) return;
+  if (!current.skus.every(skuIsComplete) || !current.pickerIds.length) return;
 
   const { isConfirmed } = await Swal.fire({
     title: 'ยืนยันการเบิก',
@@ -558,8 +592,8 @@ async function submitAllocation() {
   });
   if (!isConfirmed) return;
 
-  // Block double submits on the client; the backend also rejects a second
-  // submit for an ORD that is already PENDING.
+  // Block double submits on the client; the backend also rejects any ORD whose
+  // current status already locks it from another submission.
   submitting = true;
   updateSubmitBar();
   showLoading('กำลังบันทึก...');
@@ -617,6 +651,7 @@ function renderPendingList() {
         <div class="of-ord-title">${esc(p.ordId)}</div>
         <div class="of-ord-meta">${esc(p.customer || '-')}</div>
         <div class="of-ord-meta">ยืนยันโดย ${esc(p.user)} · ${esc(p.submittedAt)}</div>
+        ${p.pickers ? `<div class="of-ord-meta">ผู้จัดสินค้า: ${esc(p.pickers)}</div>` : ''}
         ${isException
           ? `<div class="of-pending-error">ต้องตรวจสอบ: ${esc(p.message || 'ข้อมูลพิกัดหรือ Lot เปลี่ยนระหว่างรอตัดสต็อก')}</div>`
           : `<div class="of-due">${icon('clock')}<span>ตัดสต็อกประมาณ ${esc(p.dueAt)}</span></div>`}
@@ -718,6 +753,17 @@ function wireEvents() {
     el.value = el.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
     row.amount = el.value;
     refreshSkuStatus(sku);
+  });
+
+  // Worker selection is mandatory and may contain more than one AES Team row.
+  document.getElementById('worker-picker-options').addEventListener('change', e => {
+    if (!current || e.target.type !== 'checkbox') return;
+    const selected = new Set(current.pickerIds);
+    if (e.target.checked) selected.add(e.target.value);
+    else selected.delete(e.target.value);
+    current.pickerIds = workers.filter(worker => selected.has(worker.actorId)).map(worker => worker.actorId);
+    renderWorkerPicker();
+    updateSubmitBar();
   });
 
   document.getElementById('btn-add-loc-close').addEventListener('click', closeAddLocation);

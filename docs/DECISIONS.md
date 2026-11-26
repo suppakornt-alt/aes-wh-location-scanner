@@ -175,7 +175,7 @@ products, so keeping its data correct matters more than blocking ORDs.
 ## DEC-019 — ORD status lives in a separate sheet
 
 **Decision:** `DATA : Current ORD` is read-only to the app. ORD status is kept in
-`MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` as one row per `ord_id`, overwritten on
+`MAIN : Log ORD ที่ยืนยันพิกัดแล้ว` as one row per `ord_id`, overwritten on
 status change (no status history). Chosen locations are appended to
 `MAIN : Log พิกัดจาก ORD` and never edited. Stock deductions are also audited
 in `MAIN : Log ข้อมูลตำแหน่ง`.
@@ -229,3 +229,25 @@ location may leave `CLOSED_REASON` blank.
 **Reason:** Workers need to see the relevant unclear physical quantity without
 mixing it into active stock. Empty closure does not need the same explanation
 as preserving questionable nonzero stock.
+
+## DEC-024 — Every ORD requires one or more AES Team preparers
+
+**Decision:** The office ORD header provides a required multi-worker selector
+from every valid row in `DATA : AES Team`, without filtering by `team` or
+`role`. Submit stable `actor_id` values and validate them against the live sheet
+inside the backend lock. Store readable snapshots as
+`actor_id — full_name (nickname)` in the status row's `pickers` column.
+
+**Reason:** The signed-in admin in `user` is the recorder, while `pickers`
+identifies the workers who physically prepared the ORD. Stable IDs prevent
+same-name and later nickname changes from making the audit ambiguous.
+
+## DEC-025 — Normalize the ORD status sheet name without losing history
+
+**Decision:** The canonical tab name is
+`MAIN : Log ORD ที่ยืนยันพิกัดแล้ว`. On access, rename the legacy all-caps
+`MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` tab in place if needed. If distinct old and
+new tabs coexist, stop and require an explicit data merge.
+
+**Reason:** Creating a fresh sheet after a capitalization change would hide
+existing PENDING/COMPLETED statuses and could allow duplicate deductions.

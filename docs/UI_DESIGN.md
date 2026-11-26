@@ -152,6 +152,11 @@ location cannot be chosen twice for one SKU. Free lines are not labelled. A SKU
 with exactly one location has it pre-selected; the admin still enters the
 amount. The card turns green when the SKU is exactly allocated.
 
+The ORD header's top-right control is a required multi-worker dropdown sourced
+from every valid `DATA : AES Team` row. Options display `full_name (nickname)`;
+selected workers appear as chips. `ยืนยันการเบิก` remains disabled until at
+least one worker and every SKU allocation are complete.
+
 **Fixing location data:** each SKU card has `เพิ่มพิกัดใหม่`, which opens the
 same coordinate, level, Lot, and quantity fields as the picker page (the
 product is already known, so no Lot scan is needed). Each location row has
@@ -163,7 +168,7 @@ for the ORD's four-hour hold.
 A confirmation pop-up summarizes the ORD. If the backend reports that the ORD
 changed, show `ORD นี้มีการเปลี่ยนแปลง กรุณาโหลดใหม่`.
 
-**PENDING list:** shows submitted ORDs with submit time and when stock will be
+**PENDING list:** shows submitted ORDs, selected preparers, submit time, and when stock will be
 deducted, with a cancel action for each. `EXCEPTION` entries appear in red with
 their location/Lot conflict reason and can also be canceled and redone. There
 is no edit.

@@ -13,8 +13,13 @@ const CONFIG = {
   // DATA : Current ORD is read-only input; its header is on physical row 6.
   SHEET_ORD: 'DATA : Current ORD',
   ORD_HEADER_ROW: 6,
+  // Every valid row in this row-1-header table may prepare an office ORD.
+  SHEET_AES_TEAM: 'DATA : AES Team',
+  AES_TEAM_HEADER_ROW: 1,
   // One row per ord_id with its current allocation status.
-  SHEET_ORD_STATUS: 'MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว',
+  SHEET_ORD_STATUS: 'MAIN : Log ORD ที่ยืนยันพิกัดแล้ว',
+  // Preserve existing ORD history when the capitalization change is deployed.
+  LEGACY_SHEET_ORD_STATUS: 'MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว',
   // One row per location chosen for a submitted ORD.
   SHEET_ORD_ALLOCATION: 'MAIN : Log พิกัดจาก ORD',
   // Hours a submitted ORD waits for customer cancellation before stock is cut.

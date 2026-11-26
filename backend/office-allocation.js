@@ -1,8 +1,8 @@
 // Office warehouse (ออฟฟิศโกดัง) ORD location allocation.
 //
 // Flow (see docs/OFFICE_WAREHOUSE.md):
-//   1. getOfficeOrders            -> ORDs from DATA : Current ORD that are not
-//                                    PENDING/COMPLETED, plus the PENDING list.
+//   1. getOfficeOrders            -> allocatable ORDs, AES Team workers, and
+//                                    the PENDING/EXCEPTION list.
 //   2. getOrderLocationChoices    -> ACTIVE locations with QTY > 0 per SKU.
 //   3. submitOrderAllocation      -> saves allocation rows + PENDING status.
 //                                    Does NOT deduct stock.
@@ -24,7 +24,7 @@ const ORD_STATUS = Object.freeze({
 
 // Header rows of the two sheets this module owns. Columns are always resolved
 // by these names, so the owner may reorder columns without breaking the code.
-const ORD_STATUS_HEADERS = ['timestamp', 'ord_id', 'status', 'user', 'message'];
+const ORD_STATUS_HEADERS = ['timestamp', 'ord_id', 'status', 'user', 'message', 'pickers'];
 const ORD_ALLOCATION_HEADERS = [
   'timestamp', 'ord_id', 'product_code', 'product_name', 'location_id', 'location', 'amount', 'lot_no'
 ];
@@ -101,6 +101,26 @@ function getOrCreateOwnedSheet(ss, sheetName, headers) {
     sheet.getRange(1, width + 1, 1, missing.length).setValues([missing]);
   }
   return sheet;
+}
+
+// Migrate the prior all-caps LOG sheet name in place so deployment preserves
+// every existing ORD status. Two copies are unsafe because they split history.
+function getOrCreateOrderStatusSheet(ss) {
+  let current = ss.getSheetByName(CONFIG.SHEET_ORD_STATUS);
+  const legacy = ss.getSheetByName(CONFIG.LEGACY_SHEET_ORD_STATUS);
+  if (current && legacy && current.getSheetId() !== legacy.getSheetId()) {
+    throw new Error(`พบทั้งชีต ${CONFIG.SHEET_ORD_STATUS} และ ${CONFIG.LEGACY_SHEET_ORD_STATUS} กรุณารวมข้อมูลก่อน`);
+  }
+  // Some Sheets lookups may match names without respecting capitalization;
+  // normalize the visible tab name even when both lookups return one object.
+  if (current && current.getName() !== CONFIG.SHEET_ORD_STATUS) {
+    current.setName(CONFIG.SHEET_ORD_STATUS);
+  }
+  if (!current && legacy) {
+    legacy.setName(CONFIG.SHEET_ORD_STATUS);
+    current = legacy;
+  }
+  return getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_STATUS, ORD_STATUS_HEADERS);
 }
 
 // Reads an owned sheet (header on row 1) and maps headers case-insensitively.
@@ -191,6 +211,46 @@ function serializeOrder(order) {
   };
 }
 
+// Read every populated AES Team row by header name. actor_id is the submitted
+// identity; the Thai full name and nickname are the worker-facing label.
+function readAesTeamWorkers(ss) {
+  const sheet = ss.getSheetByName(CONFIG.SHEET_AES_TEAM);
+  if (!sheet) throw new Error(`ไม่พบชีต ${CONFIG.SHEET_AES_TEAM}`);
+  const values = sheet.getDataRange().getDisplayValues();
+  const headerIndex = CONFIG.AES_TEAM_HEADER_ROW - 1;
+  const columns = getColumnIndexMap(values[headerIndex] || []);
+  ['ACTOR_ID', 'FULL_NAME', 'NICKNAME'].forEach(header => {
+    if (columns[header] === undefined) {
+      throw new Error(`ชีต ${CONFIG.SHEET_AES_TEAM} ไม่มีคอลัมน์ ${header.toLowerCase()}`);
+    }
+  });
+
+  const workers = [];
+  const seenIds = new Set();
+  for (let i = headerIndex + 1; i < values.length; i++) {
+    const row = values[i];
+    const actorId = String(getColumnValue(row, columns, 'ACTOR_ID', '')).trim();
+    const fullName = String(getColumnValue(row, columns, 'FULL_NAME', '')).trim();
+    const nickname = String(getColumnValue(row, columns, 'NICKNAME', '')).trim();
+    if (!actorId && !fullName && !nickname) continue;
+    if (!actorId || !fullName) {
+      throw new Error(`ชีต ${CONFIG.SHEET_AES_TEAM} แถว ${i + 1} ต้องมี actor_id และ full_name`);
+    }
+    if (seenIds.has(actorId)) {
+      throw new Error(`ชีต ${CONFIG.SHEET_AES_TEAM} มี actor_id ซ้ำ: ${actorId}`);
+    }
+    seenIds.add(actorId);
+    workers.push({
+      actorId: actorId,
+      fullName: fullName,
+      nickname: nickname,
+      label: nickname ? `${fullName} (${nickname})` : fullName
+    });
+  }
+  workers.sort((a, b) => a.label.localeCompare(b.label, 'th'));
+  return workers;
+}
+
 // Reads the status sheet into a Map keyed by ord_id. If the owner ever leaves
 // duplicate rows for one ord_id, the lowest row wins.
 function readOrderStatusMap(statusSheet) {
@@ -207,7 +267,8 @@ function readOrderStatusMap(statusSheet) {
       timestamp: getColumnValue(row, columns, 'TIMESTAMP', ''),
       status: String(getColumnValue(row, columns, 'STATUS', '')).trim().toUpperCase(),
       user: String(getColumnValue(row, columns, 'USER', '')).trim(),
-      message: String(getColumnValue(row, columns, 'MESSAGE', '')).trim()
+      message: String(getColumnValue(row, columns, 'MESSAGE', '')).trim(),
+      pickers: String(getColumnValue(row, columns, 'PICKERS', '')).trim()
     });
   }
   return { statusMap: statusMap, columns: columns, width: (values[0] || []).length };
@@ -228,14 +289,15 @@ function getHoldMilliseconds() {
 // API: getOfficeOrders
 // ------------------------------------------------------------
 
-// Returns ORDs that still need allocation (no status row, or CANCELED) and the
-// list of PENDING ORDs waiting for the timed deduction.
+// Returns ORDs that still need allocation, every valid AES Team worker, and
+// PENDING/EXCEPTION ORDs waiting for deduction or correction.
 function getOfficeOrders() {
   const ss = openWarehouseSpreadsheet();
   const timeZone = ss.getSpreadsheetTimeZone();
   const orders = readCurrentOrders(ss);
-  const statusSheet = getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_STATUS, ORD_STATUS_HEADERS);
+  const statusSheet = getOrCreateOrderStatusSheet(ss);
   const { statusMap } = readOrderStatusMap(statusSheet);
+  const workers = readAesTeamWorkers(ss);
 
   const available = Array.from(orders.values())
     .filter(order => !isOrderLocked(statusMap.get(order.ordId)))
@@ -252,6 +314,7 @@ function getOfficeOrders() {
       ordId: ordId,
       customer: order ? order.customer : '',
       user: entry.user,
+      pickers: entry.pickers,
       status: entry.status,
       message: entry.message,
       submittedAt: formatThaiDateTime(submittedAt, timeZone),
@@ -261,7 +324,10 @@ function getOfficeOrders() {
   });
   pending.sort((a, b) => a.dueTime - b.dueTime);
 
-  return { success: true, data: { orders: available, pending: pending, holdHours: CONFIG.ORD_HOLD_HOURS } };
+  return {
+    success: true,
+    data: { orders: available, pending: pending, workers: workers, holdHours: CONFIG.ORD_HOLD_HOURS }
+  };
 }
 
 // ------------------------------------------------------------
@@ -342,11 +408,20 @@ function getOrderLocationChoices(payload) {
 
 // Validates the payload shape before taking the lock. Returns an error message
 // or null. Business checks against live data happen inside the lock.
-function validateAllocationPayloadShape(ordId, lines, allocations) {
+function validateAllocationPayloadShape(ordId, lines, allocations, pickerIds) {
   if (!ordId) return 'ไม่พบเลข ORD';
   if (!Array.isArray(lines) || !lines.length) return 'ไม่พบรายการสินค้าใน ORD';
   if (!Array.isArray(allocations) || !allocations.length) return 'ยังไม่ได้เลือกพิกัด';
   if (allocations.length > 500) return 'จำนวนพิกัดมากเกินไป';
+  if (!Array.isArray(pickerIds) || !pickerIds.length) return 'กรุณาเลือกผู้จัดสินค้าอย่างน้อย 1 คน';
+  if (pickerIds.length > 100) return 'จำนวนผู้จัดสินค้ามากเกินไป';
+
+  // Duplicate or blank actor IDs are malformed even though the UI prevents
+  // them; backend validation keeps direct API requests safe.
+  const cleanPickerIds = pickerIds.map(id => String(id || '').trim());
+  if (cleanPickerIds.some(id => !id) || new Set(cleanPickerIds).size !== cleanPickerIds.length) {
+    return 'ข้อมูลผู้จัดสินค้าไม่ถูกต้อง';
+  }
 
   const seenLocations = new Set();
   for (const item of allocations) {
@@ -394,7 +469,8 @@ function submitOrderAllocation(payload) {
   const ordId = String(payload.ordId || '').trim();
   const lines = payload.lines;
   const allocations = payload.allocations;
-  const shapeError = validateAllocationPayloadShape(ordId, lines, allocations);
+  const pickerIds = payload.pickerIds;
+  const shapeError = validateAllocationPayloadShape(ordId, lines, allocations, pickerIds);
   if (shapeError) return { success: false, message: shapeError };
 
   const userEmail = getCurrentUserEmail();
@@ -403,15 +479,26 @@ function submitOrderAllocation(payload) {
   try {
     const ss = openWarehouseSpreadsheet();
 
+    // Resolve submitted IDs against the live team table and save canonical,
+    // human-readable identity snapshots rather than trusting browser labels.
+    const workerMap = new Map(readAesTeamWorkers(ss).map(worker => [worker.actorId, worker]));
+    const selectedWorkers = pickerIds.map(id => workerMap.get(String(id).trim()));
+    if (selectedWorkers.some(worker => !worker)) {
+      return { success: false, message: 'รายชื่อผู้จัดสินค้ามีการเปลี่ยนแปลง กรุณาโหลดใหม่' };
+    }
+    const pickersValue = selectedWorkers
+      .map(worker => `${worker.actorId} — ${worker.label}`)
+      .join('; ');
+
     const order = readCurrentOrders(ss).get(ordId);
     if (!order) return { success: false, message: `ไม่พบ ${ordId} ใน ${CONFIG.SHEET_ORD} กรุณาโหลดใหม่` };
     if (!orderMatchesSubmittedLines(order, lines)) {
       return { success: false, code: 'ORDER_CHANGED', message: 'ORD นี้มีการเปลี่ยนแปลง กรุณาโหลดใหม่' };
     }
 
-    // A PENDING/COMPLETED ORD cannot be submitted again. This also makes
-    // double-clicks and uncertain network retries safe.
-    const statusSheet = getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_STATUS, ORD_STATUS_HEADERS);
+    // A locked ORD cannot be submitted again. This also makes double-clicks
+    // and uncertain network retries safe.
+    const statusSheet = getOrCreateOrderStatusSheet(ss);
     const statusInfo = readOrderStatusMap(statusSheet);
     const existingStatus = statusInfo.statusMap.get(ordId);
     if (isOrderLocked(existingStatus)) {
@@ -513,7 +600,8 @@ function submitOrderAllocation(payload) {
       ord_id: ordId,
       status: ORD_STATUS.PENDING,
       user: userEmail,
-      message: ''
+      message: '',
+      pickers: pickersValue
     });
     const targetRow = existingStatus ? existingStatus.sheetRow : statusSheet.getLastRow() + 1;
     statusSheet.getRange(targetRow, 1, 1, statusInfo.width).setValues([statusRow]);
@@ -545,7 +633,7 @@ function cancelOrderAllocation(payload) {
   lock.waitLock(10000);
   try {
     const ss = openWarehouseSpreadsheet();
-    const statusSheet = getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_STATUS, ORD_STATUS_HEADERS);
+    const statusSheet = getOrCreateOrderStatusSheet(ss);
     const { statusMap, columns } = readOrderStatusMap(statusSheet);
     const entry = statusMap.get(ordId);
     if (!entry || (entry.status !== ORD_STATUS.PENDING && entry.status !== ORD_STATUS.EXCEPTION)) {
@@ -618,7 +706,7 @@ function processDueOrderAllocations() {
     const ss = openWarehouseSpreadsheet();
     // Ensure newly introduced message/lot_no columns exist before the trigger
     // reads older backend-owned sheets.
-    const statusSheet = getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_STATUS, ORD_STATUS_HEADERS);
+    const statusSheet = getOrCreateOrderStatusSheet(ss);
     const allocationSheet = getOrCreateOwnedSheet(ss, CONFIG.SHEET_ORD_ALLOCATION, ORD_ALLOCATION_HEADERS);
     const stateSheet = ss.getSheetByName(CONFIG.SHEET_STATE);
     if (!stateSheet) return;

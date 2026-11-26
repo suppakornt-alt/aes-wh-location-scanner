@@ -8,10 +8,10 @@ owner pushed the backend, installed the deduction trigger, and deployed a new
 web-app version. Release test results (`OFF-*` in `docs/TEST_PLAN.md`) have not
 been recorded yet.
 
-The controlled blank-Lot dropdown, delayed Lot assignment, Lot reconciliation,
-and exception handling described below were implemented locally later on
-2026-11-26. They are not production behavior until the owner reviews, pushes,
-deploys, initializes reconciliation, and completes the new tests.
+The owner later pushed the controlled blank-Lot dropdown, delayed Lot
+assignment, Lot reconciliation, and exception handling. Live deployment and
+release evidence are not recorded. The required AES Team preparer selector and
+status-sheet capitalization migration are the current local implementation.
 
 Implementation:
 
@@ -19,7 +19,7 @@ Implementation:
 | --- | --- |
 | Page | `pages/office.html`, `js/office.js`, `css/style.css` (`of-*` classes) |
 | Backend | `backend/office-allocation.js` |
-| Config | `backend/Code.js` (`SHEET_ORD`, `ORD_HEADER_ROW`, `SHEET_ORD_STATUS`, `SHEET_ORD_ALLOCATION`, `ORD_HOLD_HOURS`) |
+| Config | `backend/Code.js` (`SHEET_ORD`, `SHEET_AES_TEAM`, header rows, status/allocation sheets, `ORD_HOLD_HOURS`) |
 | API actions | `getOfficeOrders`, `getOrderLocationChoices`, `submitOrderAllocation`, `cancelOrderAllocation`, plus existing `add` and `assign` |
 | Trigger | `processDueOrderAllocations`, installed once with `installOrderDeductionTrigger` |
 
@@ -57,9 +57,10 @@ redesigned as part of the office-page implementation.
 | Sheet | Role | Written by this workflow |
 | --- | --- | --- |
 | `DATA : Current ORD` | Input ORD lines. Header row 6, data from row 7. | Never. |
+| `DATA : AES Team` | Every valid row is an eligible ORD preparer. Header row 1. | Never. |
 | `MAIN : ตำแหน่งสินค้าทั้งหมด` | Location choices and the stock that is deducted. | Yes: add location, add quantity, timed deduction. |
 | `DATA : Stock By Lot` | Supplies positive-`Remaining` Lot choices and the comparison quantity. | Never. |
-| `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` | One row per ORD, keyed by `ord_id`, overwritten on status change. Source of truth for which ORDs are done. | Yes. |
+| `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว` | One row per ORD, keyed by `ord_id`, overwritten on status change. Source of truth for which ORDs are done. | Yes. |
 | `MAIN : Log พิกัดจาก ORD` | One row per location chosen for an ORD. | Yes. |
 | `MAIN : Log ข้อมูลตำแหน่ง` | Existing quantity audit log. | Yes, when stock is actually deducted. |
 | `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ` | Append-only Lot reconciliation snapshots. | Yes. |
@@ -83,7 +84,7 @@ The page does not label free goods. Money fields are not used by this workflow.
 ### 1. Pending ORD list
 
 The page lists ORDs from `DATA : Current ORD` that are available for
-allocation. An ORD is available when `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` has
+allocation. An ORD is available when `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว` has
 no row for its `ord_id`, or its row is `CANCELED`. A `CANCELED` ORD returns to
 the list.
 
@@ -106,6 +107,10 @@ blank), and `QTY > 0`. Each choice shows `DISPLAY_LOC`, `LOT_NO`, and `QTY`.
 `LOCATION_ID` is the submitted value; display text is never used to deduct.
 
 The same location may not appear twice in one SKU card.
+
+The top-right ORD header contains a required multi-worker dropdown. It includes
+every valid `DATA : AES Team` row and displays `full_name (nickname)`. At least
+one worker must be selected; multiple workers may prepare one ORD.
 
 If the selected State row already has `LOT_NO`, the UI displays it as a
 read-only value. If `LOT_NO` is blank, the admin must choose a Lot from a
@@ -138,6 +143,7 @@ The admin can submit only when, for every SKU in the ORD:
 - every row's quantity is a positive number and does not exceed the selected
   location's current `QTY`; and
 - every selected blank-Lot location has a valid dropdown Lot for its SKU.
+- at least one live AES Team `actor_id` is selected.
 
 The final action is `ยืนยันการเบิก`. Submitting does **not** deduct stock. It
 saves the ORD as `PENDING` and the ORD leaves the pending list.
@@ -193,10 +199,13 @@ Under `LockService`, as one operation:
    `ACTIVE`, match the product code, and hold at least the chosen quantity.
 5. Preserve an existing State Lot. For a blank State Lot, verify that the
    submitted Lot is one of the SKU's positive-`Remaining` dropdown choices.
-6. Every SKU's allocated total must equal its required quantity.
-7. Append all allocation rows, including `lot_no`, in one batch with the same
+6. Re-read `DATA : AES Team`, validate every selected `actor_id`, and build the
+   canonical `actor_id — full_name (nickname)` picker snapshot.
+7. Every SKU's allocated total must equal its required quantity.
+8. Append all allocation rows, including `lot_no`, in one batch with the same
    `timestamp`. Then append the ORD's status row, or overwrite its `CANCELED`
-   row, with `PENDING`, that `timestamp`, and the submitter as `user`.
+   row, with `PENDING`, that `timestamp`, the submitter as `user`, and selected
+   preparers in `pickers`.
 
 Any failed check writes nothing.
 

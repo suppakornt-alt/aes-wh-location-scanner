@@ -30,15 +30,18 @@ Current capabilities:
   chosen from positive `Remaining` values in `DATA : Stock By Lot`, saved with
   the pending allocation, and assigned only at final deduction. See
   `docs/OFFICE_WAREHOUSE.md`.
+- Required multi-worker assignment for each ORD from every valid row in
+  `DATA : AES Team`, stored with stable `actor_id` snapshots.
 - Lot reconciliation by active `SKU_ID + LOT_NO`, with the latest result in
   State and append-only snapshots in
   `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ`.
 - Matching `CLEANUP_REQUIRED` rows appear below active scanner results in red,
   without being counted as active stock.
 
-The original office workflow was deployed on 2026-11-26. The controlled Lot
-dropdown and Lot-reconciliation enhancement is implemented locally and still
-requires owner review, synchronization, deployment, and release testing.
+The original office workflow was deployed on 2026-11-26. The owner later
+pushed the controlled Lot and Lot-reconciliation enhancement; its live web-app
+deployment and release-test results are not yet recorded. The required AES Team
+preparer selector and status-sheet rename are the current local changes.
 
 The planned third area is `ระบบฝากขาย`, a frontline consignment tire registry
 used before products are sent to a customer warehouse. Its authentication must
@@ -132,9 +135,11 @@ One-time setup for the office ORD workflow (after its first backend push):
 2. Check the Triggers page: `processDueOrderAllocations` runs every 15 minutes.
 3. Deploy a new web-app version so the new API actions are live.
 
-The sheets `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` and `MAIN : Log พิกัดจาก ORD`
+The sheets `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว` and `MAIN : Log พิกัดจาก ORD`
 are created automatically with their header row on first use. Existing copies
-gain the new `message` and `lot_no` columns automatically. The reconciliation
+gain the new `message`, `pickers`, and `lot_no` columns automatically. The old
+all-caps `MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว` tab is renamed in place when the
+new name is absent, preserving its rows. The reconciliation
 sheet `MAIN : Log เทียบ Lot สินค้าหน้างานกับในระบบ` is also created when needed.
 
 After deploying the Lot-reconciliation enhancement, run

@@ -44,7 +44,7 @@ Recorded as DEC-016 to DEC-019 in `docs/DECISIONS.md`.
 New sheets (header on row 1):
 
 ```text
-MAIN : LOG ORD ที่ยืนยันพิกัดแล้ว   timestamp | ord_id | status | user | message
+MAIN : Log ORD ที่ยืนยันพิกัดแล้ว   timestamp | ord_id | status | user | message | pickers
     one row per ord_id, overwritten on status change (no history)
 MAIN : Log พิกัดจาก ORD            timestamp | ord_id | product_code | product_name | location_id | location | amount | lot_no
     one row per chosen location, append only
@@ -114,8 +114,9 @@ None.
 
 ### Status
 
-Implemented locally on 2026-11-26. Not committed, pushed, synchronized with
-clasp, deployed, initialized against the live workbook, or release-tested yet.
+Implemented locally on 2026-11-26 and later pushed by the owner. Live web-app
+deployment, reconciliation initialization, and release-test evidence remain
+unconfirmed.
 
 ### Completed locally
 
@@ -158,3 +159,21 @@ clasp, deployed, initialized against the live workbook, or release-tested yet.
 - After backend deployment, run `rebuildLotReconciliation` once and verify the
   live State/log outputs with approved test data.
 - Run the new `REC-*`, `LIFE-*`, and `OFF-*` cases recorded in the test plan.
+
+## Follow-up: required ORD preparers and status-sheet rename
+
+Implemented locally after the owner pushed the preceding Lot work:
+
+- Added a required top-right multi-worker selector to the opened ORD.
+- Loaded every valid row from `DATA : AES Team` and displayed
+  `full_name (nickname)` while submitting stable `actor_id` values.
+- Added backend validation against the live team sheet and saved canonical
+  worker snapshots in the new last status column, `pickers`.
+- Changed the canonical sheet name to
+  `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว` and added safe in-place migration from
+  the legacy all-caps name.
+- Added pending-card worker visibility, responsive styling, architecture
+  decisions DEC-024/DEC-025, and tests OFF-029 to OFF-036.
+
+This follow-up still requires local verification, owner review, Git/clasp
+synchronization, web-app deployment, and live release testing.

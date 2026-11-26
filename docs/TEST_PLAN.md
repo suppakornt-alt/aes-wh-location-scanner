@@ -157,6 +157,14 @@ baseline log snapshots.
 | OFF-026 | State row receives a different Lot during the hold | Whole ORD becomes `EXCEPTION`; no selected location is deducted; reason appears in red | NOT_RUN |
 | OFF-027 | Selected location becomes inactive during the hold | Whole ORD becomes `EXCEPTION`; no allocation is deducted | NOT_RUN |
 | OFF-028 | Click `เติม` while allocating an ORD | State quantity increases immediately and is not delayed until ORD finalization | NOT_RUN |
+| OFF-029 | Open an ORD with valid rows in `DATA : AES Team` | Top-right dropdown lists every valid row as `full_name (nickname)`, regardless of team/role | NOT_RUN |
+| OFF-030 | Complete all SKU allocations without selecting a worker | `ยืนยันการเบิก` remains disabled and backend rejects a direct request | NOT_RUN |
+| OFF-031 | Select multiple workers and submit | Status `pickers` stores each canonical `actor_id — full_name (nickname)` separated by semicolons | NOT_RUN |
+| OFF-032 | Submit an unknown, blank, or duplicate actor ID directly | Backend rejects the request and writes no allocation/status rows | NOT_RUN |
+| OFF-033 | Cancel or trigger an exception after submission | Saved `pickers` remain on the status row for audit | NOT_RUN |
+| OFF-034 | Redo a canceled ORD with different workers | New submission replaces `pickers` with the new selection | NOT_RUN |
+| OFF-035 | Deploy with only legacy all-caps status sheet present | Backend renames it to `MAIN : Log ORD ที่ยืนยันพิกัดแล้ว`, preserves rows, and appends `pickers` | NOT_RUN |
+| OFF-036 | Both old and new status sheet names resolve to distinct tabs | Backend stops with a clear error instead of splitting history | NOT_RUN |
 
 ## Release evidence
 

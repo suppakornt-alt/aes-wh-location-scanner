@@ -100,6 +100,7 @@ NOT_RUN | PASS | FAIL | BLOCKED
 | --- | --- | --- | --- |
 | UI-001 | Open 3D view on desktop | Active stock renders and can be searched | NOT_RUN |
 | UI-002 | Apply category and velocity filters | Visible 3D stock changes correctly | NOT_RUN |
+| UI-009 | Inspect 3D coordinate labels | X labels run from A at position 1 through BH at position 60; Z labels run from 1 through 20 and remain readable in both themes | NOT_RUN |
 | UI-003 | Open operations view on mobile | Cards and actions remain usable without horizontal overflow | NOT_RUN |
 | UI-004 | Open audit view | KPI counters and discrepancy list render | NOT_RUN |
 | UI-007 | Open on Android Chrome | Camera permission, keypad, layout, and scrolling work | NOT_RUN |

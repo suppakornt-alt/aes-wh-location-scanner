@@ -98,6 +98,10 @@ desired location is not already represented.
 The 3D view renders active positive-quantity location rows. It provides SKU
 search, product-category colors, velocity/criteria filters, heatmap mode, and
 detail interaction. Inactive lifecycle rows are not rendered as active stock.
+Gray coordinate labels run through the floor center: spreadsheet columns `A`
+through `BH` identify X positions 1-60, and numbers `1` through `20` identify
+Z positions 1-20. The labels face the camera so they remain readable while the
+user rotates the model.
 
 ### Operations view
 

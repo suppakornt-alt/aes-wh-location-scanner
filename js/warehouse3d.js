@@ -7,10 +7,16 @@ const Warehouse3D = (() => {
   let controls = null;
   let gridHelper = null;
   let floorMesh = null;
+  let axisLabelGroup = null;
   let currentTheme = APP_CONFIG.defaultTheme;
   let isHeatmapMode = false;
   let activeTypeFilter = null;
   let activeCriteriaFilter = null;
+
+  // Keep the floor dimensions and coordinate labels on the same 60 x 20 model.
+  const WAREHOUSE_LENGTH = 60;
+  const WAREHOUSE_WIDTH = 20;
+  const AXIS_LABEL_Y = 0.22;
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -110,21 +116,95 @@ const Warehouse3D = (() => {
     if (totalLabel) totalLabel.innerText = `คำนวณจาก ${total} SKUs ที่มีตำแหน่ง`;
   }
 
+  function columnNumberToName(columnNumber) {
+    // Match spreadsheet-style warehouse columns so X=1 is A and X=60 is BH.
+    let value = columnNumber;
+    let name = '';
+    while (value > 0) {
+      value -= 1;
+      name = String.fromCharCode(65 + (value % 26)) + name;
+      value = Math.floor(value / 26);
+    }
+    return name;
+  }
+
+  function getAxisLabelColor() {
+    // Use theme-aware gray shades so labels remain readable on both floor colors.
+    return currentTheme === 'dark' ? 0xb8bec8 : 0x6b7280;
+  }
+
+  function createAxisLabel(text) {
+    // Canvas-backed sprites keep coordinate text facing the camera during orbiting.
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 64;
+    const context = canvas.getContext('2d');
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.font = '600 36px Arial, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillStyle = '#ffffff';
+    context.fillText(String(text), canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      color: getAxisLabelColor(),
+      transparent: true,
+      depthTest: false,
+      depthWrite: false
+    });
+    const label = new THREE.Sprite(material);
+    const isWideLabel = String(text).length > 1;
+    label.scale.set(isWideLabel ? 0.82 : 0.56, 0.42, 1);
+    label.renderOrder = 10;
+    return label;
+  }
+
+  function updateAxisLabelColors() {
+    if (!axisLabelGroup) return;
+    const color = getAxisLabelColor();
+    axisLabelGroup.children.forEach(label => label.material.color.setHex(color));
+  }
+
+  function addAxisLabels() {
+    if (!scene) return;
+    if (axisLabelGroup) scene.remove(axisLabelGroup);
+    axisLabelGroup = new THREE.Group();
+
+    // Center X labels on columns 1-60 and offset the line slightly to avoid the axis crossing.
+    for (let x = 1; x <= WAREHOUSE_LENGTH; x++) {
+      const label = createAxisLabel(columnNumberToName(x));
+      label.position.set(x - 0.5, AXIS_LABEL_Y, (WAREHOUSE_WIDTH / 2) - 0.3);
+      axisLabelGroup.add(label);
+    }
+
+    // Center Z labels on rows 1-20 with a matching offset on the perpendicular center line.
+    for (let z = 1; z <= WAREHOUSE_WIDTH; z++) {
+      const label = createAxisLabel(z);
+      label.position.set((WAREHOUSE_LENGTH / 2) + 0.3, AXIS_LABEL_Y, z - 0.5);
+      axisLabelGroup.add(label);
+    }
+
+    scene.add(axisLabelGroup);
+  }
+
   function updateGridAndFloor() {
     if (!scene) return;
     if (gridHelper) scene.remove(gridHelper);
     if (floorMesh) scene.remove(floorMesh);
     const isDark = currentTheme === 'dark';
-    gridHelper = new THREE.GridHelper(60, 60, isDark ? 0x58a6ff : 0x1a6fe0, isDark ? 0x30363d : 0xdde1e6);
-    gridHelper.position.set(30, 0, 10);
-    gridHelper.scale.set(1, 1, 20 / 60);
+    gridHelper = new THREE.GridHelper(WAREHOUSE_LENGTH, WAREHOUSE_LENGTH, isDark ? 0x58a6ff : 0x1a6fe0, isDark ? 0x30363d : 0xdde1e6);
+    gridHelper.position.set(WAREHOUSE_LENGTH / 2, 0, WAREHOUSE_WIDTH / 2);
+    gridHelper.scale.set(1, 1, WAREHOUSE_WIDTH / WAREHOUSE_LENGTH);
     scene.add(gridHelper);
     floorMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(60, 20),
+      new THREE.PlaneGeometry(WAREHOUSE_LENGTH, WAREHOUSE_WIDTH),
       new THREE.MeshBasicMaterial({ color: isDark ? 0x161b22 : 0xeceff2, side: THREE.DoubleSide })
     );
     floorMesh.rotation.x = Math.PI / 2;
-    floorMesh.position.set(30, -0.01, 10);
+    floorMesh.position.set(WAREHOUSE_LENGTH / 2, -0.01, WAREHOUSE_WIDTH / 2);
     scene.add(floorMesh);
   }
 
@@ -195,6 +275,7 @@ const Warehouse3D = (() => {
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     updateGridAndFloor();
+    addAxisLabels();
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.55);
     directionalLight.position.set(30, 40, 20);
@@ -254,6 +335,7 @@ const Warehouse3D = (() => {
     if (scene) {
       scene.background.setHex(currentTheme === 'dark' ? 0x0d1117 : 0xf4f6f8);
       updateGridAndFloor();
+      updateAxisLabelColors();
     }
   }
 
